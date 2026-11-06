@@ -16,6 +16,14 @@ Community fork of [Ultra MAX](https://github.com/PaRaN01a-hash/ultra-max-addon),
 
 The source comes from the upstream public repository, **not** necessarily the latest version of the upstream hosted service. Live-site-only features may be missing from this snapshot.
 
+## Modern full-site overlay (Ultra MAX self-host 8.1.4)
+
+The full modern UI and backend used by the Eitty integration are built reproducibly from the pinned upstream [UltraMax self-host source](https://github.com/PaRaN01a-hash/UltraMax) plus the public files in [deployment/eitty](deployment/eitty). This modern overlay is **distinct from the legacy Node server and Compose instructions below**; the repository-root Compose does not automatically deploy the 8.1.4 UI.
+
+The modern setup page includes **Importer un manifeste**: an end user can paste **their own** HTTPS `/manifest.json` URL, preview the exposed catalog names and IDs, and selectively migrate only catalog IDs recognized by the local builder. The import endpoint safely fetches public HTTPS manifests with DNS/private-address checks, size and time limits, and rate limiting. The source URL and its access token are not committed, echoed back or saved with the new setup. **This is not a full configuration backup:** provider API keys, passwords and private collections are not recoverable from a manifest alone.
+
+For public deployments, each user supplies their own source link in the UI. Never hard-code someone else's old manifest token in a distributed image, README, sample `.env`, or JavaScript bundle. A publicly accessible instance requires a valid HTTPS host, a configured TMDB key and a deployed backend—not just a GitHub fork.
+
 ## Self-host with Docker Compose
 
 Prerequisites: Docker/Compose and your own [TMDB API key](https://www.themoviedb.org/settings/api). Add a domain and HTTPS reverse proxy for remote Stremio/Nuvio clients.
