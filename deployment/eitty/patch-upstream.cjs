@@ -53,6 +53,13 @@ function apply(root) {
     webFiles += 1;
   });
 
+  // The legacy configure page is also served dynamically by the addon.
+  const legacyConfigure = path.join(addon, "configure.html");
+  if (fs.existsSync(legacyConfigure)) {
+    fs.writeFileSync(legacyConfigure,
+      rewriteWebText(fs.readFileSync(legacyConfigure, "utf8")), "utf8");
+  }
+
   let addonFiles = 0;
   walk(addon, filepath => {
     if (!filepath.endsWith(".js")) return;
@@ -61,7 +68,18 @@ function apply(root) {
       .replace(/\bcom\.ultramax\b/g, "com.niakw.ultramax")
       .replace(/new URL\((["'\x60])\/auth\//g,
         (_, quote) => "new URL(" + quote + PREFIX + "/auth/");
-    if (updated !== original) fs.writeFileSync(filepath, updated, "utf8");
+    let final = updated;
+    if (filepath.endsWith("/services/manifest-route-service.js")) {
+      const hostCheck = 'if (url.hostname !== "ultramax.vip") return false;';
+      if (!final.includes(hostCheck) || !final.includes("url.pathname.match(")) {
+        throw new Error("Manifest URL matcher changed; review prefix support");
+      }
+      final = final.replace(hostCheck,
+        'if (url.hostname !== "ultramax.vip" && url.origin !== new URL(process.env.BASE_URL).origin) return false;');
+      final = final.replace("url.pathname.match(",
+        'url.pathname.replace(/^\\/projects-site\\/ultra-max/, "").match(');
+    }
+    if (final !== original) fs.writeFileSync(filepath, final, "utf8");
     addonFiles += 1;
   });
 
