@@ -10,7 +10,7 @@ const { CATALOG_DEFS } = require("./catalogs/catalog-defs");
 const { QUICK_PICK_CATALOGS } = require("./catalogs/quick-picks");
 const { DYNAMIC_CATALOGS } = require("./catalogs/dynamic-catalogs");
 const { loadConfigs, saveConfigs } = require("./utils/config-store");
-const { hashPassword, generateToken } = require("./utils/auth");
+const { hashPassword, verifyPassword, generateToken } = require("./utils/auth");
 const { rateLimit } = require("./utils/rate-limit");
 const { fetchCached, fetchTrakt } = require("./services/api-helpers");
 const { streamBridgeResponse } = require("./services/stream-bridge");
@@ -127,6 +127,7 @@ builder.defineMetaHandler(async ({ type, id }) => {
 
 const addonInterface = builder.getInterface();
 const app = express();
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 0));
 app.use((req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Headers", "*"); res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS"); if (req.method === "OPTIONS") return res.sendStatus(200); next(); });
 app.use(express.json());
 registerCatalogRoutes(app, catalogRouteDeps);
@@ -134,6 +135,7 @@ registerConfigRoutes(app, {
   loadConfigs,
   saveConfigs,
   hashPassword,
+  verifyPassword,
   generateToken,
   rateLimit
 });
