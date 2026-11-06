@@ -16,6 +16,10 @@ Community fork of [Ultra MAX](https://github.com/PaRaN01a-hash/ultra-max-addon),
 
 The source comes from the upstream public repository, **not** necessarily the latest version of the upstream hosted service. Live-site-only features may be missing from this snapshot.
 
+## Security-pinned dependency overlay
+
+The modern Eitty Docker build now applies `deployment/eitty/security-dependency-overrides.cjs` to the pinned 8.1.4 upstream source, regenerates its lockfile, then runs `npm ci`. This keeps security fixes in the auditable overlay rather than altering the original repository. The paired `niakw/eitty-web` production audit reached zero npm production advisories on 6 November 2026. UI image optimization uses the separately mirrored `optimize-web-artwork.cjs` and excludes client install icons.
+
 ## Modern full-site overlay (Ultra MAX self-host 8.1.4)
 
 The full modern UI and backend used by the Eitty integration are built reproducibly from the pinned upstream [UltraMax self-host source](https://github.com/PaRaN01a-hash/UltraMax) plus the public files in [deployment/eitty](deployment/eitty). This modern overlay is **distinct from the legacy Node server and Compose instructions below**; the repository-root Compose does not automatically deploy the 8.1.4 UI.
