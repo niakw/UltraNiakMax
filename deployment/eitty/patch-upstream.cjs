@@ -44,6 +44,25 @@ function apply(root) {
       ".filter(s => Number.isInteger(s?.season_number) && s.season_number >= 0)"), "utf8");
   }
 
+  // Reproducible, privacy-preserving manifest import: both UI and API.
+  const importFiles = [
+    ["manifest-link-import.js", path.join(web, "setup-modules/manifest-link-import.js")],
+    ["manifest-import-service.cjs", path.join(addon, "services/manifest-import-service.js")]
+  ];
+  for (const [name, destination] of importFiles) {
+    const source = path.join(__dirname, name);
+    if (!fs.existsSync(source)) throw new Error("Missing manifest import overlay: " + name);
+    fs.copyFileSync(source, destination);
+  }
+  const setupPath = path.join(web, "setup.html");
+  const setupBefore = fs.readFileSync(setupPath, "utf8");
+  const projectImportScript = '<script src="/setup-modules/project-import.js?v=20260925-streamlangs1"></script>';
+  if (setupBefore.split(projectImportScript).length !== 2) {
+    throw new Error("Project importer script changed; review import UI insertion");
+  }
+  fs.writeFileSync(setupPath, setupBefore.replace(projectImportScript,
+    projectImportScript + '\\n<script src="/setup-modules/manifest-link-import.js"></script>'), "utf8");
+
   let webFiles = 0;
   walk(web, filepath => {
     if (!VALID_WEB_EXTENSIONS.has(path.extname(filepath).toLowerCase())) return;
@@ -107,11 +126,20 @@ function apply(root) {
     addonFiles += 1;
   });
 
+  const backendIndexPath = path.join(addon, "index.js");
+  const backendIndex = fs.readFileSync(backendIndexPath, "utf8");
+  const routeMarker = "registerArtworkRoutes(app);";
+  if (backendIndex.split(routeMarker).length !== 2) {
+    throw new Error("Could not locate express API registration for manifest import");
+  }
+  fs.writeFileSync(backendIndexPath, backendIndex.replace(routeMarker,
+    routeMarker + '\\nrequire("./services/manifest-import-service").registerManifestImportRoutes(app);'), "utf8");
+
   const index = fs.readFileSync(path.join(web, "index.html"), "utf8");
   const setup = fs.readFileSync(path.join(web, "setup.html"), "utf8");
   const handler = fs.readFileSync(seasonPaths[0], "utf8");
   if (!index.includes(PREFIX + "/setup.html") ||
-      !setup.includes(PREFIX + "/setup-modules/") ||
+      !setup.includes(PREFIX + "/setup-modules/manifest-link-import.js") ||
       !handler.includes("season_number >= 0")) {
     throw new Error("Post-patch smoke assertions failed");
   }
