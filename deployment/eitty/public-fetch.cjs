@@ -52,8 +52,18 @@ async function fetchPublicHttps(input, { signal, headers = {}, timeout = 10000,
   const pinnedIp = records[0].address;
   const agent = new https.Agent({
     keepAlive: false,
-    lookup(_hostname, _options, callback) {
-      callback(null, pinnedIp, 4);
+    lookup(_hostname, options, callback) {
+      // Node 20+ may request all:true and then expects a DNS record array.
+      // Returning a bare IP in that mode raises ERR_INVALID_IP_ADDRESS.
+      if (typeof options === "function") {
+        callback = options;
+        options = {};
+      }
+      if (options && options.all === true) {
+        callback(null, [{ address: pinnedIp, family: 4 }]);
+      } else {
+        callback(null, pinnedIp, 4);
+      }
     }
   });
   try {
