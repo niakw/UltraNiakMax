@@ -1,78 +1,71 @@
-# Ultra MAX
+# Ultra MAX — niakw fork
 
-**Ultra MAX is a free, customisable discovery, catalog and metadata addon for Nuvio and Stremio.** It lets users build personalised movie and TV home screens with curated catalogs, collections, profiles, artwork, search, metadata providers and optional stream integrations.
+Community fork of [Ultra MAX](https://github.com/PaRaN01a-hash/ultra-max-addon), a metadata, discovery and catalog addon for **Stremio** and **Nuvio**. This repository is separate from the official hosted service at [ultramax.vip](https://ultramax.vip/).
 
-> **Official current information:** https://ultramax.vip/about.html
-> **Build your setup:** https://ultramax.vip/setup.html
-> **Self-host edition:** https://github.com/PaRaN01a-hash/UltraMax
+> **Not a hosted addon:** GitHub only stores the source. To install *this fork*, run its Node server behind HTTPS. The official ultramax.vip installer still points to the upstream addon, not this fork.
 
-## Current status
+## Changes in this fork
 
-- **Hosted addon:** Ultra MAX 8.1.4
-- **Updated:** 26 September 2026
-- **Core Ultra MAX addon:** free
-- **Clients:** Nuvio and Stremio
-- **Android app:** Google Play closed testing
-- **Community/support:** https://discord.gg/dbaXb6wpk
+- [Issue #29](https://github.com/PaRaN01a-hash/ultra-max-addon/issues/29): TMDB Season **0 / Specials** now appears in series metadata, including configured and unconfigured paths.
+- Season/episode handling is shared by the two metadata handlers, preserves Stremio episode IDs (e.g. `tt123:0:1`), sorts episodes, tolerates failed seasons and uses at most four concurrent TMDB season requests per show.
+- API requests have a bounded 5-minute LRU cache (1,000 entries), coalesce simultaneous duplicates and separate Trakt cache entries by client key.
+- New configuration tokens have 128 bits of randomness; passwords use salted scrypt hashes. Existing SHA-256 hashes can still be verified and are upgraded when the configuration is saved.
+- Configuration writes use an atomic file replacement, with a configurable storage path.
+- Docker self-hosting no longer depends on the original developer's server paths or dev-only files.
+- The fork has its own Stremio/Nuvio manifest IDs, so it does not replace the official installation.
 
-This repository contains the public source history of the hosted Ultra MAX addon. The live service at **ultramax.vip** evolves more quickly than this repository, so the official website and About page are the canonical source for current product status and features.
+The source comes from the upstream public repository, **not** necessarily the latest version of the upstream hosted service. Live-site-only features may be missing from this snapshot.
 
-## What Ultra MAX does
+## Self-host with Docker Compose
 
-Ultra MAX is a configuration and discovery layer for movie and TV home screens. Users choose the rows and integrations they want, arrange them, save the setup and install it into Nuvio or Stremio.
+Prerequisites: Docker/Compose and your own [TMDB API key](https://www.themoviedb.org/settings/api). Add a domain and HTTPS reverse proxy for remote Stremio/Nuvio clients.
 
-Current capabilities include:
+```bash
+git clone https://github.com/niakw/ultra-max-addon.git
+cd ultra-max-addon
+cp .env.example .env
+# Set TMDB_KEY in .env
+docker compose up -d --build
+```
 
-- personalised movie and TV catalog layouts
-- multiple profiles and saved setups
-- curated catalogs, streaming-service rows, genres, studios, decades and themed collections
-- custom collections and custom rows
-- search and recommendation tools
-- international metadata, language and region controls
-- content controls for anime, Indian cinema, talk shows, reality, news and soaps
-- TMDB and MDBList for core discovery
-- optional TVDB and OMDb metadata providers
-- artwork integrations including RPDB, TOP Posters, Fanart.tv, Better Posters and Pictorium
-- optional Trakt, Simkl, MyAnimeList and AniList integrations
-- optional stream/debrid integrations
-- Premiumize and TorBox Cloud Library support
-- Nuvio-focused collection and setup tools
+The server listens on `127.0.0.1:7000` by default. Check `http://127.0.0.1:7000/health` and `http://127.0.0.1:7000/configure`. To change its local port, set `HOST_PORT` in `.env`. Proxy the local port through HTTPS before installing from a remote device.
 
-## Metadata providers
+Configurations are stored in the persistent Docker volume `ultramax-data` (`/app/data/configs.json`). Images, if added to the deployment, use `ultramax-images`. Don't remove these volumes when redeploying.
 
-**Core discovery:** TMDB or MDBList.
+For direct Node execution (Node.js 24 recommended): `npm ci`, configure `.env`, then `npm start`. The default file storage path in this mode is `./configs.json`, or set `CONFIGS_FILE` to another writable path.
 
-**Optional metadata:** TVDB and OMDb.
+## Install the fork in Stremio or Nuvio
 
-Users provide their own provider credentials where required.
+1. Deploy the fork to a publicly reachable **HTTPS** origin, for example `https://ultramax.example.com`.
+2. Visit `https://ultramax.example.com/configure`, choose catalogs and create a configuration. The editor provides the token and manifest URL.
+3. Install the appropriate URL in your client:
 
-## Cloud Library
+| Client | Manifest URL |
+| --- | --- |
+| Stremio | `https://ultramax.example.com/c/YOUR_TOKEN/manifest.json` |
+| Nuvio | `https://ultramax.example.com/n/YOUR_TOKEN/manifest.json` |
 
-Ultra MAX can turn supported files already stored in a user's cloud provider into matched movie and series rows with Ultra MAX metadata and artwork.
+Replace the example domain and token with the **actual deployed origin and generated token**. Neither URL works just by forking the repository. A Stremio deep link can be formed as `stremio://ultramax.example.com/c/YOUR_TOKEN/manifest.json` after deployment.
 
-Supported Cloud Library providers include **Premiumize** and **TorBox**.
+**Important:** the old official hosted URL is not linked to this fork, and creating a GitHub fork does not configure DNS or start a server.
 
-## Ultra MAX and UltraPlay+
+## Testing
 
-The core Ultra MAX addon remains free. **UltraPlay+** is a separate optional companion with additional discovery and management tools such as Finder, Nuvio Manager and MAX Picks. Plus subscriptions help cover the servers, APIs and ongoing costs behind the free Ultra MAX service.
+```bash
+npm ci
+npm test
+```
 
-## What Ultra MAX is not
+The Node test suite covers Season 0/special episodes, episode ordering, IDs and partial TMDB failures. The `/health` endpoint checks that the server is reachable; actual Stremio/Nuvio playback and artwork behavior must still be validated on client devices.
 
-Ultra MAX does **not** sell or host a library of movies or TV programmes. It is a discovery, catalog, metadata and configuration layer. Optional third-party services are connected by users with their own accounts or API credentials.
+## Security and compatibility notes
 
-## Official links
+- Treat each configuration URL/token as a **secret**: older configs may include provider API keys, and the configuration API currently returns saved settings to callers with that token. Prefer new tokens (16 random bytes), HTTPS and private sharing.
+- Existing **8-character** tokens created before this fork remain usable but are weaker. Re-create those configurations if they were shared.
+- Use a trusted reverse proxy for TLS. Set `TRUST_PROXY_HOPS=1` only when there is exactly one proxy in front of Node; otherwise leave it at `0`.
+- TMDB is required; MDBList, Trakt and AI services are optional and require their own keys. No third-party keys are bundled.
+- Some image assets and product links in the historical configuration UI still reference the upstream site's public assets. This source snapshot does not include the entire production asset library.
 
-- Website: https://ultramax.vip/
-- What is Ultra MAX?: https://ultramax.vip/about.html
-- Builder: https://ultramax.vip/setup.html
-- Changelog: https://ultramax.vip/changelog.html
-- Self-host edition: https://github.com/PaRaN01a-hash/UltraMax
-- Discord: https://discord.gg/dbaXb6wpk
-- Reddit: https://reddit.com/r/Ultra_Max
-- Ko-fi: https://ko-fi.com/ultramaxaddon
+## Upstream
 
-## About old version references
-
-Older posts, forks and search results may mention Ultra MAX v5, v6, v7, old catalog counts or earlier setup flows. Those describe historical releases and should not be treated as the current Ultra MAX feature set.
-
-For the current product description, use **https://ultramax.vip/about.html**.
+Original project: [PaRaN01a-hash/ultra-max-addon](https://github.com/PaRaN01a-hash/ultra-max-addon). Official documentation: [ultramax.vip/about.html](https://ultramax.vip/about.html). This fork is independently maintained and does not change the official hosted addon.
