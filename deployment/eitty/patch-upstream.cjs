@@ -61,7 +61,7 @@ function apply(root) {
     throw new Error("Project importer script changed; review import UI insertion");
   }
   fs.writeFileSync(setupPath, setupBefore.replace(projectImportScript,
-    projectImportScript + '\\n<script src="/setup-modules/manifest-link-import.js"></script>'), "utf8");
+    projectImportScript + '\n<script src="/setup-modules/manifest-link-import.js"></script>'), "utf8");
 
   let webFiles = 0;
   walk(web, filepath => {
@@ -133,7 +133,7 @@ function apply(root) {
     throw new Error("Could not locate express API registration for manifest import");
   }
   fs.writeFileSync(backendIndexPath, backendIndex.replace(routeMarker,
-    routeMarker + '\\nrequire("./services/manifest-import-service").registerManifestImportRoutes(app);'), "utf8");
+    routeMarker + '\nrequire("./services/manifest-import-service").registerManifestImportRoutes(app);'), "utf8");
 
   const index = fs.readFileSync(path.join(web, "index.html"), "utf8");
   const setup = fs.readFileSync(path.join(web, "setup.html"), "utf8");
