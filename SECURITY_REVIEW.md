@@ -75,3 +75,17 @@ scanning alert is closed. Those categories need separate authorized access.
 5. A zero scanner count must never be manufactured by indiscriminate alert
    dismissals. Document residual trade-offs and close reviewed findings only
    with a defensible reason.
+
+## Latest verification references
+
+- Legacy fork regression and privacy tests (including malicious JSON,
+  guarded stream fetch, and scrypt migration): workflow run
+  [42287084788](https://github.com/niakw/UltraNiakMax/actions/runs/42287084788).
+- Full npm dependency audit and CodeQL inventory: workflow run
+  [42287084698](https://github.com/niakw/UltraNiakMax/actions/runs/42287084698).
+- Production Eitty integration, including the mirrored hardened public fetcher
+  and fail-closed analytics script filter: workflow run
+  [42285477759](https://github.com/niakw/eitty-web/actions/runs/42285477759).
+- The CodeQL scan of the most recent prototype-correction commit completed
+  after that inventory; a subsequent inventory is required for an up-to-date
+  count of remaining open alerts.
