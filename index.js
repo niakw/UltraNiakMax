@@ -301,14 +301,14 @@ document.querySelectorAll('button[data-url]').forEach(function(btn){
 ;
 
 app.get("/", (req, res) => res.redirect("/configure"));
-app.get("/configure", (req, res) => { res.setHeader("Cache-Control","public, max-age=300"); res.sendFile(path.join(__dirname,"configure.html")); });
-app.get("/configure/:token", (req, res) => { res.setHeader("Cache-Control","public, max-age=300"); res.sendFile(path.join(__dirname,"configure.html")); });
-app.get("/c/:token/configure", (req, res) => { res.redirect(`/configure/${req.params.token}`); });
-app.get("/logo.svg", (req, res) => { res.sendFile(path.join(__dirname,"logo.svg")); });
-app.get("/collections-builder", (req, res) => { res.sendFile(path.join(__dirname,"collections-builder.html")); });
+app.get("/configure", assetsLimiter, (req, res) => { res.setHeader("Cache-Control","public, max-age=300"); res.sendFile(path.join(__dirname,"configure.html")); });
+app.get("/configure/:token", assetsLimiter, (req, res) => { res.setHeader("Cache-Control","public, max-age=300"); res.sendFile(path.join(__dirname,"configure.html")); });
+app.get("/c/:token/configure", assetsLimiter, (req, res) => { res.redirect(`/configure/${req.params.token}`); });
+app.get("/logo.svg", assetsLimiter, (req, res) => { res.sendFile(path.join(__dirname,"logo.svg")); });
+app.get("/collections-builder", assetsLimiter, (req, res) => { res.sendFile(path.join(__dirname,"collections-builder.html")); });
 app.use("/images", express.static(path.join(__dirname,"images"), { maxAge: '7d', etag: true }));
 
-app.get("/collections.json", (req, res) => { res.sendFile(path.join(__dirname,"collections.json")); });
+app.get("/collections.json", assetsLimiter, (req, res) => { res.sendFile(path.join(__dirname,"collections.json")); });
 
 app.post("/api/ai/custom-row", apiLimiter, async (req, res) => {
   try {

@@ -1,5 +1,6 @@
 function updateLastAccess(config) {
-  if (!config || typeof config !== "object" || Array.isArray(config)) return false;
+  if (!config || typeof config !== "object" || Array.isArray(config) ||
+      Object.getPrototypeOf(config) !== Object.prototype) return false;
   if (
     !config.lastAccessed ||
     Date.now() - new Date(config.lastAccessed).getTime() >
