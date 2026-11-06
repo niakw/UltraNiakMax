@@ -1,0 +1,113 @@
+name: Security inventory and dependency gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/security-inventory.yml
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/security-inventory.yml
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Inventory GitHub security alerts (never print secrets)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const base = "https://api.github.com/repos/" + process.env.GH_REPOSITORY;
+          const headers = {
+            Authorization: "Bearer " + process.env.GH_TOKEN,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
+          };
+          async function inventory(kind, select) {
+            const rows = [];
+            for (let page = 1; page <= 20; page++) {
+              const url = base + "/" + kind + "/alerts?state=open&per_page=100&page=" + page;
+              const response = await fetch(url, {headers, signal: AbortSignal.timeout(15000)});
+              if (!response.ok) {
+                console.log(kind + ": not readable with workflow token (HTTP " + response.status + ")");
+                return;
+              }
+              const data = await response.json();
+              if (!Array.isArray(data)) {
+                console.log(kind + ": unexpected API response");
+                return;
+              }
+              for (const alert of data) rows.push(select(alert));
+              if (data.length < 100) break;
+            }
+            console.log(kind + ": " + rows.length + " open alerts");
+            for (const entry of rows) console.log(kind + " " + JSON.stringify(entry));
+          }
+          (async () => {
+            await inventory("dependabot", a => ({
+              number: a.number, package: a.dependency?.package?.name,
+              severity: a.security_advisory?.severity,
+              vulnerable_range: a.security_vulnerability?.vulnerable_version_range,
+              patched: a.security_vulnerability?.first_patched_version?.identifier || null
+            }));
+            await inventory("code-scanning", a => ({
+              number: a.number, severity: a.rule?.security_severity_level || a.rule?.severity,
+              rule: a.rule?.id, path: a.most_recent_instance?.location?.path
+            }));
+            // Never print alert locations, token fragments or secret values.
+            await inventory("secret-scanning", a => ({
+              number: a.number, type: a.secret_type, validity: a.validity
+            }));
+          })().catch(e => {
+            console.error("Inventory failed: " + e.message);
+            process.exitCode = 1;
+          });
+          NODE
+      - name: Install locked packages
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Audit all npm dependencies and report every severity
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > "$RUNNER_TEMP/npm-audit.json"
+          audit_status=$?
+          set -e
+          node - "$RUNNER_TEMP/npm-audit.json" "$audit_status" <<'NODE'
+          const fs = require("node:fs");
+          const [filename, code] = process.argv.slice(2);
+          let report;
+          try { report = JSON.parse(fs.readFileSync(filename, "utf8")); }
+          catch { console.error("::error::Invalid npm audit result"); process.exit(2); }
+          if (report.error || !report.metadata || !report.vulnerabilities) {
+            console.error("::error::npm audit failed without reliable advisory data");
+            process.exit(2);
+          }
+          console.log("npm audit counts:", JSON.stringify(report.metadata.vulnerabilities));
+          for (const [name,v] of Object.entries(report.vulnerabilities)) {
+            const entries = (v.via || []).filter(x=>typeof x==="object")
+              .map(x=>({title:x.title,range:x.range,url:x.url}));
+            console.log("npm vulnerability:", JSON.stringify({
+              name,severity:v.severity,range:v.range,isDirect:v.isDirect,
+              fixAvailable:v.fixAvailable,advisories:entries
+            }));
+          }
+          if (Number(code) !== 0) process.exit(1);
+          NODE
