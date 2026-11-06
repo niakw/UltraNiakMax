@@ -1,0 +1,17 @@
+**/.git
+**/.gitignore
+.env
+.env.*
+!.env.example
+configs.json
+node_modules
+data
+images
+*.log
+*.bak
+*.tar.gz
+*.backup*
+archive-backups
+old-dev-backups-*
+test
+.github
