@@ -52,7 +52,8 @@ function registerManifestImportRoutes(app, options = {}) {
     }
 
     const now = Date.now();
-    // Nginx replaces X-Real-IP with its validated client address.\n    const ip = String(req.get("x-real-ip") || req.ip || "unknown").slice(0, 80);
+    // Nginx replaces X-Real-IP with its validated client address.
+    const ip = String(req.get("x-real-ip") || req.ip || "unknown").slice(0, 80);
     if (attempts.size > 3000) {
       for (const [key, value] of attempts) {
         if (now - value.since >= 60000) attempts.delete(key);
