@@ -1,71 +1,26 @@
 services:
-  stremio-filtered:
-    image: stremio-addon
-    container_name: stremio-filtered
+  ultramax:
+    build: .
+    image: ultramax-niakw:local
+    container_name: ultramax-niakw
     restart: unless-stopped
     env_file: .env
     environment:
-      - TMDB_KEY=${TMDB_KEY}
-      - MDBLIST_KEY=${MDBLIST_KEY}
-      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID}
-      - FILTER_MODE=on
-      - PORT=7000
+      PORT: "7000"
+      CONFIGS_FILE: /app/data/configs.json
+      IMAGES_DIR: /app/images
     ports:
-      - "7000:7000"
+      - "127.0.0.1:${HOST_PORT:-7000}:7000"
     volumes:
-      - ./index.js:/app/index.js
-      - ./logo.svg:/app/logo.svg
-      - ./configure.html:/app/configure.html
-      - ./configs.json:/app/configs.json
-      - /home/ubuntu/images:/app/images
-    networks:
-      - npm_default
+      - ultramax-data:/app/data
+      - ultramax-images:/app/images
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get('http://127.0.0.1:7000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
-  stremio-all:
-    image: stremio-addon
-    container_name: stremio-all
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      - TMDB_KEY=${TMDB_KEY}
-      - MDBLIST_KEY=${MDBLIST_KEY}
-      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID}
-      - FILTER_MODE=off
-      - PORT=7000
-    ports:
-      - "7001:7000"
-    volumes:
-      - ./index.js:/app/index.js
-      - ./logo.svg:/app/logo.svg
-      - ./configure.html:/app/configure.html
-      - ./configs.json:/app/configs.json
-      - /home/ubuntu/images:/app/images
-    networks:
-      - npm_default
-
-  stremio-dev:
-    image: stremio-addon
-    container_name: stremio-dev
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      - TMDB_KEY=${TMDB_KEY}
-      - MDBLIST_KEY=${MDBLIST_KEY}
-      - TRAKT_CLIENT_ID=${TRAKT_CLIENT_ID}
-      - FILTER_MODE=on
-      - PORT=7000
-    ports:
-      - "7003:7000"
-    volumes:
-      - ./index-dev.js:/app/index.js
-      - ./configure-dev.html:/app/configure.html
-      - ./logo.svg:/app/logo.svg
-      - /home/ubuntu/images:/app/images
-      - ./collections-builder.html:/app/collections-builder.html
-      - ./configs.json:/app/configs.json
-    networks:
-      - npm_default
-
-networks:
-  npm_default:
-    external: true
+volumes:
+  ultramax-data:
+  ultramax-images:
