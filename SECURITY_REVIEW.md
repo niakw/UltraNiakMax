@@ -89,3 +89,34 @@ scanning alert is closed. Those categories need separate authorized access.
 - The CodeQL scan of the most recent prototype-correction commit completed
   after that inventory; a subsequent inventory is required for an up-to-date
   count of remaining open alerts.
+
+## Verified open-alert disposition — 2026-11-06 20:19 UTC
+
+After completion of the latest CodeQL analysis, the [independent inventory run
+42287337902](https://github.com/niakw/UltraNiakMax/actions/runs/42287337902)
+reported **2 open CodeQL alerts**, reduced from the initial 40, and
+**0 npm audit vulnerabilities** (all severities). The two remaining alerts
+are **not dismissed**:
+
+1. **#41 — critical, `js/request-forgery`, `deployment/eitty/public-fetch.cjs`.**
+   The HTTP destination is supplied by an end-user manifest URL, which is an
+   intentional feature. Runtime controls enforce public HTTPS, reject IP
+   literals and non-public DNS records, pin the audited IPv4 into the HTTPS
+   agent, disable proxy use and redirects, and limit response size/time.
+   Synthetic tests demonstrate both private-DNS rejection and public-IP
+   pinning. CodeQL does not currently recognize those safeguards, so a
+   separate reviewed false-positive disposition may be appropriate; it has
+   **not** been silently suppressed.
+
+2. **#9 — high, `js/insufficient-password-hash`, `utils/auth.js`.**
+   Verification of old fixed-salt SHA-256 hashes remains for users who have
+   not yet signed in since migration. All new passwords use salted scrypt.
+   Successful authorized profile operations upgrade the stored legacy hash,
+   and tests verify that migration. Removing the fallback immediately would
+   lock existing users out of their configurations; a staged retirement
+   requires confirming their migration or providing an approved reset path.
+
+Dependabot and secret-scanning alert details remain outside the permissions
+of this CI inventory (HTTP 403), and this document therefore does **not**
+claim those categories have zero open alerts. The audited npm dependency tree
+itself has zero reported vulnerabilities.
