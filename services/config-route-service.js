@@ -18,6 +18,13 @@ function hasUnsafeKeys(value,depth=0) {
   }
   return false;
 }
+function migrateLegacyPassword(config, password, hashPassword, saveConfigs, configs) {
+  if (typeof config.passwordHash === "string" &&
+      !config.passwordHash.startsWith("scrypt:")) {
+    config.passwordHash=hashPassword(password);
+    saveConfigs(configs);
+  }
+}
 function registerConfigRoutes(app, deps) {
   const {
     loadConfigs,
@@ -204,6 +211,7 @@ function registerConfigRoutes(app, deps) {
     if(!config) return res.status(404).json({error:"Not found"});
     if(!verifyPassword(req.body?.password,config.passwordHash))
       return res.status(401).json({error:"Incorrect password"});
+    migrateLegacyPassword(config,req.body.password,hashPassword,saveConfigs,configs);
     res.setHeader("Cache-Control","private, no-store");
     res.json({
       catalogs: config.catalogs,
@@ -235,6 +243,7 @@ function registerConfigRoutes(app, deps) {
     if (!verifyPassword(req.body?.password,config.passwordHash)) {
       return res.status(401).json({error:"Incorrect password"});
     }
+    migrateLegacyPassword(config,req.body.password,hashPassword,saveConfigs,configs);
     res.setHeader("Cache-Control","private, no-store");
 
     const redact = value => {
@@ -298,9 +307,11 @@ function registerConfigRoutes(app, deps) {
     }
 
     const { collections, replace, password } = req.body || {};
-    if (!verifyPassword(password || req.get("x-config-password"),config.passwordHash)) {
+    const verifiedPassword=password || req.get("x-config-password");
+    if (!verifyPassword(verifiedPassword,config.passwordHash)) {
       return res.status(401).json({error:"Password required"});
     }
+    migrateLegacyPassword(config,verifiedPassword,hashPassword,saveConfigs,configs);
 
     if (!Array.isArray(collections) || collections.length>200 || hasUnsafeKeys(collections)) {
       return res.status(400).json({
