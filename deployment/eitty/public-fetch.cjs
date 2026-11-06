@@ -43,7 +43,8 @@ function validateTarget(input) {
     throw new Error("Only public HTTPS addon URLs without credentials are supported");
   }
   const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-  if (net.isIP(hostname) || hostname === "localhost" ||
+  if (hostname.startsWith("[") || hostname.includes(":") ||
+      net.isIP(hostname) || hostname === "localhost" ||
       hostname.endsWith(".localhost") || hostname.endsWith(".local") ||
       hostname.endsWith(".internal") || hostname.endsWith(".lan") ||
       hostname.endsWith(".test") || hostname.endsWith(".invalid") ||
