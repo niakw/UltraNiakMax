@@ -47,6 +47,7 @@ function apply(root) {
   // Reproducible, privacy-preserving manifest import: both UI and API.
   const importFiles = [
     ["manifest-link-import.js", path.join(web, "setup-modules/manifest-link-import.js")],
+    ["portable-profile-normalizer.js", path.join(web, "setup-modules/portable-profile-normalizer.js")],
     ["manifest-import-service.cjs", path.join(addon, "services/manifest-import-service.js")]
   ];
   for (const [name, destination] of importFiles) {
@@ -54,6 +55,43 @@ function apply(root) {
     if (!fs.existsSync(source)) throw new Error("Missing manifest import overlay: " + name);
     fs.copyFileSync(source, destination);
   }
+  // The upstream JSON project import restores only a subset of portable
+  // profiles; migrate all safe profile fields before it clears current state.
+  const projectImporterPath = path.join(web, "setup-modules/project-import.js");
+  let projectImporter = fs.readFileSync(projectImporterPath, "utf8");
+  const importerFunction = "function importProjectData(data){";
+  if (projectImporter.split(importerFunction).length !== 2) {
+    throw new Error("Upstream project importer changed; review portable migration");
+  }
+  const importerPrefix = [
+    "function importProjectData(data){",
+    "  const isPortableV2 = !!(data && data.kind === 'ultramax-portable-profile');",
+    "  if (isPortableV2) {",
+    "    if (!window.UltraMaxPortableProfile) throw new Error('Portable importer unavailable');",
+    "    data = window.UltraMaxPortableProfile.normalizePortableProfile(data);",
+    "    const originalSetup = data.setup || {};",
+    "    const preservedKeys = {};",
+    "    ['mdblistKey','tmdbKey','tvdbKey','tvdbPin','rpdbKey','tpKey','traktUser'].forEach(function(id){",
+    "      const control = document.getElementById(id);",
+    "      if(control && control.value) preservedKeys[id] = control.value;",
+    "    });",
+    "    data.setup = Object.assign({}, preservedKeys, originalSetup);",
+    "  }"
+  ].join("\\n");
+  projectImporter = projectImporter.replace(importerFunction, importerPrefix);
+  const importerSelectionMarker = "  applyImportedSelections(data.selectedCatalogs || [], data.hiddenCatalogs || []);";
+  if (projectImporter.split(importerSelectionMarker).length !== 2) {
+    throw new Error("Could not locate project importer catalog selection");
+  }
+  projectImporter = projectImporter.replace(importerSelectionMarker,
+    "  if(typeof setContentFilterFields === 'function' && data.contentFilters) setContentFilterFields(data.contentFilters);\\n" +
+    "  customCatalogs = Array.isArray(data.customCatalogs) ? data.customCatalogs : [];\\n" +
+    "  customMdbLists = Array.isArray(data.customMdbLists) ? data.customMdbLists : [];\\n" +
+    "  window.catalogOverrides = (data.catalogOverrides && typeof data.catalogOverrides === 'object' && !Array.isArray(data.catalogOverrides)) ? data.catalogOverrides : {};\\n" +
+    "  if(typeof renderCustomCatalogList === 'function') renderCustomCatalogList();\\n" +
+    importerSelectionMarker);
+  fs.writeFileSync(projectImporterPath, projectImporter, "utf8");
+
   const setupPath = path.join(web, "setup.html");
   const setupBefore = fs.readFileSync(setupPath, "utf8");
   const projectImportScript = '<script src="/setup-modules/project-import.js?v=20260925-streamlangs1"></script>';
@@ -61,7 +99,8 @@ function apply(root) {
     throw new Error("Project importer script changed; review import UI insertion");
   }
   fs.writeFileSync(setupPath, setupBefore.replace(projectImportScript,
-    projectImportScript + '\n<script src="/setup-modules/manifest-link-import.js"></script>'), "utf8");
+    '<script src="/setup-modules/portable-profile-normalizer.js"></script>\\n' +
+    projectImportScript + '\\n<script src="/setup-modules/manifest-link-import.js"></script>'), "utf8");
 
   let webFiles = 0;
   walk(web, filepath => {
@@ -140,6 +179,7 @@ function apply(root) {
   const handler = fs.readFileSync(seasonPaths[0], "utf8");
   if (!index.includes(PREFIX + "/setup.html") ||
       !setup.includes(PREFIX + "/setup-modules/manifest-link-import.js") ||
+      !setup.includes(PREFIX + "/setup-modules/portable-profile-normalizer.js") ||
       !handler.includes("season_number >= 0")) {
     throw new Error("Post-patch smoke assertions failed");
   }
