@@ -1,5 +1,5 @@
 "use strict";
-// Reproducible overlay. Source: https://github.com/niakw/ultra-max-addon
+// Reproducible overlay. Source: https://github.com/niakw/UltraNiakMax
 const fs = require("node:fs");
 const path = require("node:path");
 const PREFIX = "/projects-site/ultra-max";

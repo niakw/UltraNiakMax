@@ -35,8 +35,8 @@ For public deployments, each user supplies their own source link in the UI. Neve
 Prerequisites: Docker/Compose and your own [TMDB API key](https://www.themoviedb.org/settings/api). Add a domain and HTTPS reverse proxy for remote Stremio/Nuvio clients.
 
 ```bash
-git clone https://github.com/niakw/ultra-max-addon.git
-cd ultra-max-addon
+git clone https://github.com/niakw/UltraNiakMax.git
+cd UltraNiakMax
 cp .env.example .env
 # Set TMDB_KEY in .env
 docker compose up -d --build
@@ -71,6 +71,10 @@ npm test
 ```
 
 The Node test suite covers Season 0/special episodes, episode ordering, IDs and partial TMDB failures. The `/health` endpoint checks that the server is reachable; actual Stremio/Nuvio playback and artwork behavior must still be validated on client devices.
+
+## Search indexing and privacy
+
+The legacy Node server sends `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex` on **all responses**, including manifests, media and error responses. Its configuration HTML includes a matching robots meta tag. The `/robots.txt` endpoint allows crawlers to read these directives; blocking crawlers with `Disallow` could leave URL-only search results. The modern Eitty integration independently enforces the same exclusion at Nginx and during its HTML build. Neither mechanism authenticates visitors: installation tokens and credentials must still be handled privately. This **public GitHub repository itself can be indexed**.
 
 ## Security and compatibility notes
 

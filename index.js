@@ -38,6 +38,7 @@ const { registerConfigRoutes } = require("./services/config-route-service");
 const { handleCatalog: handleCatalogService } = require("./services/catalog-handler-service");
 const { registerCatalogRoutes } = require("./services/catalog-route-service");
 const { registerStatsRoutes } = require("./services/stats-route-service");
+const { applySearchExclusion, ROBOTS_TXT } = require("./utils/search-exclusion");
 
 if (!TMDB_KEY) { console.error("TMDB_KEY missing - exiting"); process.exit(1); }
 
@@ -128,6 +129,9 @@ builder.defineMetaHandler(async ({ type, id }) => {
 const addonInterface = builder.getInterface();
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 0));
+// Consistent noindex on HTML, manifests, images and HTTP error responses.
+app.use(applySearchExclusion);
+app.get("/robots.txt", (_req, res) => res.type("text/plain").send(ROBOTS_TXT));
 app.use((req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Headers", "*"); res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS"); if (req.method === "OPTIONS") return res.sendStatus(200); next(); });
 app.use(express.json());
 registerCatalogRoutes(app, catalogRouteDeps);
