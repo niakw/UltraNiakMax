@@ -3240,7 +3240,7 @@ function renderCollections(){
     return '<div class="result-section" style="margin-bottom:16px;">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:'+(c.collapsed ? '0' : '10px')+';">'
       +   '<div>'
-      +     '<div class="result-label">'+c.title+'</div>'
+      +     '<div class="result-label">'+escapeHtml(c.title)+'</div>'
       +     '<div style="font-size:12px;color:#999;">'+(c.folders||[]).length+' folder'+((c.folders||[]).length!==1?'s':'')+'</div>'
       +   '</div>'
       +   '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">'
@@ -3262,7 +3262,7 @@ function renderCollections(){
 
             return '<div style="padding:10px 0;border-top:' + (fi===0 ? '0' : '1px solid #1a1a1a') + ';">'
               + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'
-              + '<div>• ' + f.title + ' (' + (f.rows||[]).length + ')</div>'
+              + '<div>• ' + escapeHtml(f.title) + ' (' + (f.rows||[]).length + ')</div>'
               + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
               + '<button class="global-btn" onclick="moveFolderUp('+i+','+fi+')">&#8593;</button>'
               + '<button class="global-btn" onclick="moveFolderDown('+i+','+fi+')">&#8595;</button>'
@@ -3284,7 +3284,7 @@ function renderCollections(){
               + '<div style="font-size:10px;color:#777;margin-bottom:6px;">Cover Preview</div>'
               + (
                   (f.coverImageUrl && f.coverImageUrl.trim())
-                  ? '<img src="' + f.coverImageUrl + '" style="width:120px;height:68px;object-fit:cover;border:1px solid #2a2a2a;border-radius:6px;background:#0a0a0a;" onerror="this.outerHTML=\'<div style=&quot;width:120px;height:68px;display:flex;align-items:center;justify-content:center;border:1px solid #2a2a2a;border-radius:6px;color:#666;font-size:10px;&quot;>Image failed</div>\'">'
+                  ? '<img src="' + escapeHtml(f.coverImageUrl) + '" style="width:120px;height:68px;object-fit:cover;border:1px solid #2a2a2a;border-radius:6px;background:#0a0a0a;" onerror="this.outerHTML=\'<div style=&quot;width:120px;height:68px;display:flex;align-items:center;justify-content:center;border:1px solid #2a2a2a;border-radius:6px;color:#666;font-size:10px;&quot;>Image failed</div>\'">'
                   : '<div style="width:120px;height:68px;display:flex;align-items:center;justify-content:center;border:1px solid #2a2a2a;border-radius:6px;color:#666;font-size:10px;">No image</div>'
                 )
               + '</div>'
@@ -3293,7 +3293,7 @@ function renderCollections(){
               + '<div style="font-size:10px;color:#777;margin-bottom:6px;">GIF Preview</div>'
               + (
                   (f.focusGifEnabled && f.focusGifUrl && f.focusGifUrl.trim())
-                  ? '<img src="' + f.focusGifUrl + '" style="width:120px;height:68px;object-fit:cover;border:1px solid #2a2a2a;border-radius:6px;background:#0a0a0a;" onerror="this.outerHTML=\'<div style=&quot;width:120px;height:68px;display:flex;align-items:center;justify-content:center;border:1px solid #2a2a2a;border-radius:6px;color:#666;font-size:10px;&quot;>GIF failed</div>\'">'
+                  ? '<img src="' + escapeHtml(f.focusGifUrl) + '" style="width:120px;height:68px;object-fit:cover;border:1px solid #2a2a2a;border-radius:6px;background:#0a0a0a;" onerror="this.outerHTML=\'<div style=&quot;width:120px;height:68px;display:flex;align-items:center;justify-content:center;border:1px solid #2a2a2a;border-radius:6px;color:#666;font-size:10px;&quot;>GIF failed</div>\'">'
                   : '<div style="width:120px;height:68px;display:flex;align-items:center;justify-content:center;border:1px solid #2a2a2a;border-radius:6px;color:#666;font-size:10px;">No GIF</div>'
                 )
               + '</div>'
@@ -3301,12 +3301,12 @@ function renderCollections(){
               + '</div>'
 
               + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">'
-              + '<input type="text" value="' + (f.coverImageUrl || '') + '" placeholder="Cover image URL" oninput="updateFolderCover('+i+','+fi+', this.value)" style="flex:1;min-width:220px;padding:10px;background:#0d0d0d;color:#fff;border:1px solid #2a2a2a;border-radius:6px;" />'
+              + '<input type="text" value="' + escapeHtml(f.coverImageUrl || '') + '" placeholder="Cover image URL" oninput="updateFolderCover('+i+','+fi+', this.value)" style="flex:1;min-width:220px;padding:10px;background:#0d0d0d;color:#fff;border:1px solid #2a2a2a;border-radius:6px;" />'
               + '<button class="global-btn" type="button" onclick="openAssetLibrary('+i+','+fi+', \'cover\')">Browse Cover</button>'
               + '</div>'
 
               + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">'
-              + '<input type="text" value="' + (f.focusGifUrl || '') + '" placeholder="Focus GIF URL" oninput="updateFolderGif('+i+','+fi+', this.value)" style="flex:1;min-width:220px;padding:10px;background:#0d0d0d;color:#fff;border:1px solid #2a2a2a;border-radius:6px;" />'
+              + '<input type="text" value="' + escapeHtml(f.focusGifUrl || '') + '" placeholder="Focus GIF URL" oninput="updateFolderGif('+i+','+fi+', this.value)" style="flex:1;min-width:220px;padding:10px;background:#0d0d0d;color:#fff;border:1px solid #2a2a2a;border-radius:6px;" />'
               + '<button class="global-btn" type="button" onclick="openAssetLibrary('+i+','+fi+', \'gif\')">Browse GIF</button>'
               + '<label style="display:flex;align-items:center;gap:6px;color:#aaa;font-size:11px;">'
               + '<input type="checkbox" ' + (f.focusGifEnabled ? 'checked' : '') + ' onchange="toggleFolderGif('+i+','+fi+', this.checked)" /> GIF On'
@@ -5384,7 +5384,7 @@ function showBanner(msg, type){
   const d = document.createElement('div');
   d.id = 'liveBanner';
   d.className = 'banner-msg ' + (type === 'error' ? 'banner-error' : 'banner-success');
-  d.innerHTML = msg;
+  d.textContent = String(msg);
   document.body.appendChild(d);
 
   setTimeout(function(){
@@ -5952,7 +5952,12 @@ async function generate(){
     document.getElementById('installBtn').href = 'stremio://' + manifestUrl.replace('https://','').replace('http://','');
 
     document.getElementById('tokenDisplay').textContent = data.token;
-    document.getElementById('editLink').innerHTML = '<a href="/configure/' + data.token + '" style="color:#888;">ultramax.vip/configure/' + data.token + '</a>';
+    const editLink = document.getElementById('editLink');
+    const editAnchor = document.createElement('a');
+    editAnchor.href = '/configure/' + encodeURIComponent(String(data.token));
+    editAnchor.style.color = '#888';
+    editAnchor.textContent = window.location.host + '/configure/' + data.token;
+    editLink.replaceChildren(editAnchor);
     saveDraftState();
     document.getElementById('resultBox').style.display = 'block';
     document.getElementById('loading').classList.remove('visible');
@@ -6305,6 +6310,15 @@ function streamWizardNameFromUrl(url){
   return 'Stream Addon';
 }
 
+function safePreviewPoster(value) {
+  try {
+    const target = new URL(String(value), window.location.origin);
+    return target.protocol === "https:" &&
+      (target.hostname === "image.tmdb.org" ||
+        target.origin === window.location.origin);
+  } catch {return false;}
+}
+const escHtml = escapeHtml;
 function escapeHtml(str){
   return String(str || '')
     .replace(/&/g,'&amp;')
@@ -6351,9 +6365,12 @@ async function checkStreamWizardAddon(){
           <div style="margin:10px 0;">
             ${types.map(t => `<span class="stream-type-pill">${escapeHtml(t)}</span>`).join('')}
           </div>
-          <button type="button" class="nav-btn primary" onclick="addCheckedStreamAddon('${escapeHtml(data.manifestUrl || manifestUrl)}')">Add to Ultra MAX</button>
+          <button type="button" class="nav-btn primary" id="wizardAddVerifiedAddon">Add to Ultra MAX</button>
         </div>
       `;
+      result.querySelector('#wizardAddVerifiedAddon')?.addEventListener('click', () =>
+        addCheckedStreamAddon(data.manifestUrl || manifestUrl));
+
     }
   }catch(err){
     if(result) result.innerHTML = '<div class="stream-error">❌ ' + escapeHtml(err.message || 'Check failed') + '</div>';
@@ -6437,7 +6454,7 @@ function initGuidedSetup(){
     card.innerHTML = `
       <button type="button" class="guided-head" onclick="openGuidedSection('${id}')">
         <span>
-          <div class="guided-title">${title}</div>
+          <div class="guided-title">${escapeHtml(title)}</div>
           <div class="guided-sub">${sub}</div>
         </span>
         <span class="guided-badge">Locked</span>
@@ -6803,7 +6820,7 @@ function makeStep2Accordion(){
     card.innerHTML = `
       <button type="button" class="step2-accordion-head" onclick="openStep2Accordion('${id}')">
         <span>
-          <div class="step2-accordion-title">${title}</div>
+          <div class="step2-accordion-title">${escapeHtml(title)}</div>
           <div class="step2-accordion-help">${help}</div>
         </span>
         <span class="step2-accordion-badge">Open</span>
@@ -7604,7 +7621,7 @@ async function previewCustomCatalog(){
   const url = "/preview/tmdb?" + qs.toString();
   console.log("Ultra MAX preview URL:", url);
 
-  target.innerHTML = '<div style="color:#aaa;padding:10px;">Loading preview...<br><small>' + url + '</small></div>';
+  target.textContent = 'Loading preview...';
 
   try{
     const res = await fetch(url, { cache: "no-store" });
@@ -7612,7 +7629,7 @@ async function previewCustomCatalog(){
     const items = data.results || [];
 
     if(!items.length){
-      target.innerHTML = '<div style="color:#ffb4b4;padding:10px;">No preview titles found.<br><small>' + url + '</small></div>';
+      target.textContent = 'No preview titles found.';
       return;
     }
 
@@ -7627,8 +7644,8 @@ async function previewCustomCatalog(){
             : (x.poster || x.image || "");
           return `
             <div style="background:#111;border:1px solid #2a2a2a;border-radius:10px;overflow:hidden;">
-              ${poster ? `<img src="${poster}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;">` : `<div style="aspect-ratio:2/3;background:#222;"></div>`}
-              <div style="padding:7px;font-size:11px;color:#eee;line-height:1.2;">${title}</div>
+              ${poster && safePreviewPoster(poster) ? `<img src="${escapeHtml(poster)}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;">` : `<div style="aspect-ratio:2/3;background:#222;"></div>`}
+              <div style="padding:7px;font-size:11px;color:#eee;line-height:1.2;">${escapeHtml(title)}</div>
             </div>
           `;
         }).join("")}
@@ -7636,7 +7653,7 @@ async function previewCustomCatalog(){
     `;
   }catch(err){
     console.error(err);
-    target.innerHTML = '<div style="color:#ffb4b4;padding:10px;">Preview failed: ' + (err.message || err) + '<br><small>' + url + '</small></div>';
+    target.textContent = 'Preview failed.';
   }
 }
 </script>
@@ -7735,8 +7752,8 @@ async function generateFiveAiRowsList(){
               const poster = x.poster_path ? "https://image.tmdb.org/t/p/w185" + x.poster_path : "";
               return `
                 <div style="width:82px;flex:0 0 82px;background:#151515;border:1px solid #292929;border-radius:9px;overflow:hidden;">
-                  ${poster ? `<img src="${poster}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;">` : `<div style="aspect-ratio:2/3;background:#222;"></div>`}
-                  <div style="font-size:10px;line-height:1.2;padding:5px;color:#eee;">${title}</div>
+                  ${poster && safePreviewPoster(poster) ? `<img src="${escapeHtml(poster)}" style="width:100%;aspect-ratio:2/3;object-fit:cover;display:block;">` : `<div style="aspect-ratio:2/3;background:#222;"></div>`}
+                  <div style="font-size:10px;line-height:1.2;padding:5px;color:#eee;">${escapeHtml(title)}</div>
                 </div>
               `;
             }).join("")}

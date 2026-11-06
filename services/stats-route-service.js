@@ -1,9 +1,19 @@
+const crypto=require("node:crypto");
 function registerStatsRoutes(app, { loadConfigs }) {
 
-  app.get("/admin/stats/:secret", (req, res) => {
+  // Never put administrative credentials into URLs or access logs.
+  app.get("/admin/stats/:secret", (_req,res) => res.status(410).json({error:"Stats moved to authenticated POST"}));
+  app.post("/admin/stats", (req, res) => {
 
-if (req.params.secret !== process.env.STATS_SECRET) {
-  return res.status(403).json({ error: "Forbidden" });
+const secret=process.env.STATS_SECRET;
+const supplied=req.get("x-stats-secret") || "";
+if (!secret || secret.length<24 || typeof supplied!=="string") {
+  return res.status(403).json({error:"Forbidden"});
+}
+const expected=crypto.createHash("sha256").update(secret).digest();
+const received=crypto.createHash("sha256").update(supplied).digest();
+if (!crypto.timingSafeEqual(expected,received)) {
+  return res.status(403).json({error:"Forbidden"});
 }
     const configs = loadConfigs();
     const now = Date.now();

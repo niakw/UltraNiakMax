@@ -1,3 +1,21 @@
+"use strict";
+const reservedTokens=new Set(["__proto__","prototype","constructor"]);
+function recordForToken(configs,token) {
+  if(typeof token!=="string" || token.length<6 || token.length>80 ||
+      !/^[A-Za-z0-9_-]+$/.test(token) || reservedTokens.has(token.toLowerCase()) ||
+      !Object.prototype.hasOwnProperty.call(configs,token)) return null;
+  const record=configs[token];
+  return record && typeof record==="object" && !Array.isArray(record) ? record : null;
+}
+function hasUnsafeKeys(value,depth=0) {
+  if(depth>16) return true;
+  if(!value || typeof value!=="object") return false;
+  if(Object.keys(value).length>300) return true;
+  for(const [key,item] of Object.entries(value)) {
+    if(reservedTokens.has(key.toLowerCase()) || hasUnsafeKeys(item,depth+1)) return true;
+  }
+  return false;
+}
 function registerConfigRoutes(app, deps) {
   const {
     loadConfigs,
@@ -99,67 +117,68 @@ function registerConfigRoutes(app, deps) {
     } = req.body;
 
     const configs = loadConfigs();
+    const config=recordForToken(configs,token);
 
-    if (!configs[token]) {
+    if (!config) {
       return res.status(404).json({
         error: "Config not found"
       });
     }
 
-    if (!verifyPassword(password, configs[token].passwordHash)) {
+    if (!verifyPassword(password, config.passwordHash)) {
       return res.status(401).json({
         error: "Incorrect password"
       });
     }
 
     // Migrate existing legacy hashes only after a successful password check.
-    if (!String(configs[token].passwordHash).startsWith("scrypt:")) {
-      configs[token].passwordHash = hashPassword(password);
+    if (!String(config.passwordHash).startsWith("scrypt:")) {
+      config.passwordHash = hashPassword(password);
     }
 
-    configs[token].catalogs = catalogs !== undefined ? catalogs : (configs[token].catalogs || []);
-    configs[token].language = language || configs[token].language || "en-US";
-    configs[token].rpdbKey = rpdbKey || configs[token].rpdbKey || null;
-    configs[token].tpKey = tpKey || configs[token].tpKey || null;
-    configs[token].fanartKey = fanartKey || configs[token].fanartKey || null;
-    configs[token].omdbKey = omdbKey || configs[token].omdbKey || null;
-    configs[token].mdblistKey = mdblistKey || configs[token].mdblistKey || null;
-    configs[token].traktUser =
+    config.catalogs = catalogs !== undefined ? catalogs : (config.catalogs || []);
+    config.language = language || config.language || "en-US";
+    config.rpdbKey = rpdbKey || config.rpdbKey || null;
+    config.tpKey = tpKey || config.tpKey || null;
+    config.fanartKey = fanartKey || config.fanartKey || null;
+    config.omdbKey = omdbKey || config.omdbKey || null;
+    config.mdblistKey = mdblistKey || config.mdblistKey || null;
+    config.traktUser =
       traktUser !== undefined
         ? traktUser
-        : configs[token].traktUser;
+        : config.traktUser;
 
-    configs[token].excludeUnreleased =
+    config.excludeUnreleased =
       excludeUnreleased !== undefined
         ? !!excludeUnreleased
-        : (configs[token].excludeUnreleased || false);
+        : (config.excludeUnreleased || false);
 
-    configs[token].maxRating =
+    config.maxRating =
       maxRating !== undefined
         ? maxRating
-        : (configs[token].maxRating || null);
+        : (config.maxRating || null);
 
-    configs[token].streamAddons = Array.isArray(streamAddons)
+    config.streamAddons = Array.isArray(streamAddons)
       ? streamAddons.filter(Boolean)
-      : (configs[token].streamAddons || []);
+      : (config.streamAddons || []);
 
-    configs[token].customCatalogs = Array.isArray(customCatalogs)
+    config.customCatalogs = Array.isArray(customCatalogs)
       ? customCatalogs.filter(Boolean)
-      : (configs[token].customCatalogs || []);
+      : (config.customCatalogs || []);
 
-    configs[token].googleAiKey =
-      googleAiKey || configs[token].googleAiKey || null;
+    config.googleAiKey =
+      googleAiKey || config.googleAiKey || null;
 
-    configs[token].enableAiRecommended =
+    config.enableAiRecommended =
       enableAiRecommended !== undefined
         ? !!enableAiRecommended
-        : !!configs[token].enableAiRecommended;
+        : !!config.enableAiRecommended;
 
-    configs[token].hiddenCatalogs = Array.isArray(hiddenCatalogs)
+    config.hiddenCatalogs = Array.isArray(hiddenCatalogs)
       ? hiddenCatalogs
-      : (configs[token].hiddenCatalogs || []);
+      : (config.hiddenCatalogs || []);
 
-    configs[token].updatedAt = new Date().toISOString();
+    config.updatedAt = new Date().toISOString();
 
     saveConfigs(configs);
 
@@ -169,35 +188,36 @@ function registerConfigRoutes(app, deps) {
   app.get("/c/:token/config", (req, res) => {
     const { token } = req.params;
     const configs = loadConfigs();
+    const config=recordForToken(configs,token);
 
-    if (!configs[token]) {
+    if (!config) {
       return res.status(404).json({
         error: "Not found"
       });
     }
 
     res.json({
-      catalogs: configs[token].catalogs,
-      mdblistKey: configs[token].mdblistKey,
-      language: configs[token].language,
-      rpdbKey: configs[token].rpdbKey,
-      tpKey: configs[token].tpKey,
-      fanartKey: configs[token].fanartKey || null,
-      omdbKey: configs[token].omdbKey || null,
-      traktUser: configs[token].traktUser,
-      excludeUnreleased: configs[token].excludeUnreleased || false,
-      maxRating: configs[token].maxRating || null,
-      streamAddons: configs[token].streamAddons || [],
-      customCatalogs: configs[token].customCatalogs || [],
-      googleAiKey: configs[token].googleAiKey || null,
-      enableAiRecommended: !!configs[token].enableAiRecommended
+      catalogs: config.catalogs,
+      mdblistKey: config.mdblistKey,
+      language: config.language,
+      rpdbKey: config.rpdbKey,
+      tpKey: config.tpKey,
+      fanartKey: config.fanartKey || null,
+      omdbKey: config.omdbKey || null,
+      traktUser: config.traktUser,
+      excludeUnreleased: config.excludeUnreleased || false,
+      maxRating: config.maxRating || null,
+      streamAddons: config.streamAddons || [],
+      customCatalogs: config.customCatalogs || [],
+      googleAiKey: config.googleAiKey || null,
+      enableAiRecommended: !!config.enableAiRecommended
     });
   });
 
   app.get("/debug/config/:token", (req, res) => {
     const { token } = req.params;
     const configs = loadConfigs();
-    const config = configs[token];
+    const config=recordForToken(configs,token);
 
     if (!config) {
       return res.status(404).json({
@@ -259,27 +279,31 @@ function registerConfigRoutes(app, deps) {
   app.post("/c/:token/collections", (req, res) => {
     const { token } = req.params;
     const configs = loadConfigs();
+    const config=recordForToken(configs,token);
 
-    if (!configs[token]) {
+    if (!config) {
       return res.status(404).json({
         error: "Not found"
       });
     }
 
-    const { collections, replace } = req.body;
+    const { collections, replace, password } = req.body || {};
+    if (!verifyPassword(password || req.get("x-config-password"),config.passwordHash)) {
+      return res.status(401).json({error:"Password required"});
+    }
 
-    if (!Array.isArray(collections)) {
+    if (!Array.isArray(collections) || collections.length>200 || hasUnsafeKeys(collections)) {
       return res.status(400).json({
         error: "Invalid collections"
       });
     }
 
-    const existing = Array.isArray(configs[token].collections)
-      ? configs[token].collections
+    const existing = Array.isArray(config.collections)
+      ? config.collections
       : [];
 
     if (replace === true) {
-      configs[token].collections = collections;
+      config.collections = collections;
     } else {
       const keyOf = c =>
         String(
@@ -310,7 +334,7 @@ function registerConfigRoutes(app, deps) {
         }
       }
 
-      configs[token].collections = merged;
+      config.collections = merged;
     }
 
     saveConfigs(configs);
@@ -320,19 +344,20 @@ function registerConfigRoutes(app, deps) {
       mode: replace === true ? "replace" : "merge",
       before: existing.length,
       incoming: collections.length,
-      after: configs[token].collections.length
+      after: config.collections.length
     });
   });
 
   app.get("/c/:token/collections.json", (req, res) => {
     const { token } = req.params;
     const configs = loadConfigs();
+    const config=recordForToken(configs,token);
 
-    if (!configs[token]) {
+    if (!config) {
       return res.status(404).json([]);
     }
 
-    res.json(configs[token].collections || []);
+    res.json(config.collections || []);
   });
 }
 

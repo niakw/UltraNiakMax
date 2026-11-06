@@ -17,11 +17,12 @@ function loadConfigs() {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("Invalid configurations file");
     }
-    configCache = parsed;
+    // Null prototype: token keys cannot mutate an inherited prototype.
+    configCache = Object.assign(Object.create(null), parsed);
     configCacheMtime = mtime;
     return parsed;
   } catch (error) {
-    if (error.code === "ENOENT") return configCache || {};
+    if (error.code === "ENOENT") return configCache || Object.create(null);
     // Don't erase existing configurations after a corrupt file or I/O failure.
     throw error;
   }

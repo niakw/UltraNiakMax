@@ -120,7 +120,7 @@ app.get("/trending", (req, res) => {
   const fs = require("fs");
   try {
     const configs = loadConfigs();
-    const counts = {};
+    const counts = Object.create(null);
     for(const token of Object.values(configs)){
       const catalogs = token.catalogs || [];
       for(const id of catalogs){
@@ -330,7 +330,7 @@ app.post("/api/ai/custom-row", async (req, res) => {
     
     if (!key) {
       // 🔁 Fallback: simple parser (no AI key needed)
-      const lower = prompt.toLowerCase();
+      const lower = String(prompt).slice(0, 1000).toLowerCase();
 
       const isSeries = lower.includes("series") || lower.includes("shows") || lower.includes("tv");
       const type = isSeries ? "series" : "movie";
@@ -358,7 +358,7 @@ app.post("/api/ai/custom-row", async (req, res) => {
       }
 
       let rating = "";
-      const ratingMatch = lower.match(/(?:rating\s*(?:on|of|above|over)?|above|over)\s*(\d+(\.\d+)?)/);
+      const ratingMatch = lower.slice(0, 1000).match(/(?:rating|above|over)\s*(\d{1,2}(?:\.\d)?)/);
       if (ratingMatch) {
         rating = ratingMatch[1];
       }

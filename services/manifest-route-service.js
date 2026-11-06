@@ -1,12 +1,12 @@
 function updateLastAccess(configs, token) {
-  const config = configs[token];
+  const config = Object.prototype.hasOwnProperty.call(configs, token) ? configs[token] : null;
 
   if (
     !config.lastAccessed ||
     Date.now() - new Date(config.lastAccessed).getTime() >
       24 * 60 * 60 * 1000
   ) {
-    configs[token].lastAccessed = new Date().toISOString();
+    config.lastAccessed = new Date().toISOString();
     return true;
   }
 
@@ -24,7 +24,7 @@ function handleNuvioManifest(req, res, deps) {
 
   const { token } = req.params;
   const configs = loadConfigs();
-  const config = configs[token];
+  const config = Object.prototype.hasOwnProperty.call(configs, token) ? configs[token] : null;
 
   if (!config) {
     return res.status(404).json({ error: "Config not found" });
@@ -119,7 +119,7 @@ const {
 
   const { token } = req.params;
   const configs = loadConfigs();
-  const config = configs[token];
+  const config = Object.prototype.hasOwnProperty.call(configs, token) ? configs[token] : null;
 
   if (!config) {
     return res.status(404).json({ error: "Config not found" });
