@@ -77,18 +77,18 @@ function apply(root) {
     "    });",
     "    data.setup = Object.assign({}, preservedKeys, originalSetup);",
     "  }"
-  ].join("\\n");
+  ].join("\n");
   projectImporter = projectImporter.replace(importerFunction, importerPrefix);
   const importerSelectionMarker = "  applyImportedSelections(data.selectedCatalogs || [], data.hiddenCatalogs || []);";
   if (projectImporter.split(importerSelectionMarker).length !== 2) {
     throw new Error("Could not locate project importer catalog selection");
   }
   projectImporter = projectImporter.replace(importerSelectionMarker,
-    "  if(typeof setContentFilterFields === 'function' && data.contentFilters) setContentFilterFields(data.contentFilters);\\n" +
-    "  customCatalogs = Array.isArray(data.customCatalogs) ? data.customCatalogs : [];\\n" +
-    "  customMdbLists = Array.isArray(data.customMdbLists) ? data.customMdbLists : [];\\n" +
-    "  window.catalogOverrides = (data.catalogOverrides && typeof data.catalogOverrides === 'object' && !Array.isArray(data.catalogOverrides)) ? data.catalogOverrides : {};\\n" +
-    "  if(typeof renderCustomCatalogList === 'function') renderCustomCatalogList();\\n" +
+    "  if(typeof setContentFilterFields === 'function' && data.contentFilters) setContentFilterFields(data.contentFilters);\n" +
+    "  customCatalogs = Array.isArray(data.customCatalogs) ? data.customCatalogs : [];\n" +
+    "  customMdbLists = Array.isArray(data.customMdbLists) ? data.customMdbLists : [];\n" +
+    "  window.catalogOverrides = (data.catalogOverrides && typeof data.catalogOverrides === 'object' && !Array.isArray(data.catalogOverrides)) ? data.catalogOverrides : {};\n" +
+    "  if(typeof renderCustomCatalogList === 'function') renderCustomCatalogList();\n" +
     importerSelectionMarker);
   fs.writeFileSync(projectImporterPath, projectImporter, "utf8");
 
@@ -99,8 +99,8 @@ function apply(root) {
     throw new Error("Project importer script changed; review import UI insertion");
   }
   fs.writeFileSync(setupPath, setupBefore.replace(projectImportScript,
-    '<script src="/setup-modules/portable-profile-normalizer.js"></script>\\n' +
-    projectImportScript + '\\n<script src="/setup-modules/manifest-link-import.js"></script>'), "utf8");
+    '<script src="/setup-modules/portable-profile-normalizer.js"></script>\n' +
+    projectImportScript + '\n<script src="/setup-modules/manifest-link-import.js"></script>'), "utf8");
 
   let webFiles = 0;
   walk(web, filepath => {
