@@ -7,18 +7,30 @@ const dns = require("node:dns").promises;
 const https = require("node:https");
 const net = require("node:net");
 
+// Conservative IANA special-use IPv4 ranges, checked once per process.
+// Blocking all reserved/documentation/benchmark ranges avoids a malicious
+// addon host using DNS to point at an internal or unroutable endpoint.
+const deniedIPv4 = new net.BlockList();
+for (const [network, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.88.99.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4]
+]) deniedIPv4.addSubnet(network, prefix, "ipv4");
+
 function isPublicIPv4(value) {
-  if (net.isIP(value) !== 4) return false;
-  const [a, b, c] = value.split(".").map(Number);
-  if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
-  if (a === 100 && b >= 64 && b <= 127) return false;
-  if (a === 169 && b === 254) return false;
-  if (a === 172 && b >= 16 && b <= 31) return false;
-  if (a === 192 && (b === 168 || (b === 0 && (c === 0 || c === 2)) ||
-    (b === 88 && c === 99))) return false;
-  if (a === 198 && ((b === 18 || b === 19) || (b === 51 && c === 100))) return false;
-  if (a === 203 && b === 0 && c === 113) return false;
-  return true;
+  return net.isIP(value) === 4 && !deniedIPv4.check(value, "ipv4");
 }
 
 function validateTarget(input) {
