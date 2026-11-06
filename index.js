@@ -210,10 +210,26 @@ app.get("/assets", (req, res) => {
   const mode = req.query.mode || 'cover';
   const ci = req.query.ci || '';
   const fi = req.query.fi || '';
-  const returnTo = req.query.returnTo || '';
+  // Only permit navigation back to this deployment's own configuration page.
+  const rawReturnTo = String(req.query.returnTo || "");
+  let returnTo = "";
+  try {
+    const parsed = new URL(rawReturnTo, "https://" + req.get("host"));
+    if (parsed.host === req.get("host") && parsed.pathname.startsWith("/configure")) {
+      returnTo = parsed.pathname + parsed.search + parsed.hash;
+    }
+  } catch { /* Ignore malformed return URLs. */ }
+
+  const asJsString = value => JSON.stringify(String(value))
+    .replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
+  const asIndex = value => /^\\d+$/.test(String(value)) && Number.isSafeInteger(Number(value))
+    ? String(Number(value)) : "null";
 
   const cards = allFiles.map(f => {
-    const safeName = String(f.name).replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const safeName = String(f.name)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
     return `<div class="card" data-name="${safeName.toLowerCase()}" data-folder="${f.label.toLowerCase()}">
       <img src="${f.url}" loading="lazy">
       <div class="name">${safeName}</div>
@@ -268,10 +284,10 @@ app.get("/assets", (req, res) => {
 <div class="empty" id="emptyMsg" style="display:none;">No images found</div>
 <script>
 var currentFilter='all';
-var returnTo='${returnTo}';
-var mode='${mode}';
-var ci=${ci||'null'};
-var fi=${fi||'null'};
+var returnTo=${asJsString(returnTo)};
+var mode=${asJsString(mode)};
+var ci=${asIndex(ci)};
+var fi=${asIndex(fi)};
 
 function setFilter(f,el){
   currentFilter=f;
