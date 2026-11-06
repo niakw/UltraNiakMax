@@ -64,7 +64,7 @@ async function handleMetaRequest({ type, id }, deps) {
 
     if (type === "series") {
       const seasons = (d.seasons || [])
-        .filter(s => s.season_number > 0);
+        .filter(s => Number.isInteger(s?.season_number) && s.season_number >= 0);
 
       const seasonData = await Promise.all(
         seasons.map(async season => {
