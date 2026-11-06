@@ -25,12 +25,15 @@ pkg.dependencies.multer = "2.5.0";
 pkg.dependencies.compression = "1.8.2";
 const overrides = { ...(pkg.overrides || {}) };
 delete overrides["body-parser@1.20.6"];
+delete overrides["express@4.22.1"];
 Object.assign(overrides, {
   "body-parser@^1.0.0": "1.20.9",
+  "express@^4.0.0": "4.22.3",
+  "qs": "6.16.1",
   "body-parser@^2.0.0": "2.4.0",
   "follow-redirects": "1.16.2",
   "proxy-addr": "2.0.8"
 });
 pkg.overrides = overrides;
 fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n", "utf8");
-console.log("Reviewed production dependency overrides applied: multer 2.5.0, compression 1.8.2, body-parser 1.x/2.x patched, follow-redirects 1.16.2, proxy-addr 2.0.8.");
+console.log("Reviewed production dependency overrides applied: multer 2.5.0, compression 1.8.2, body-parser 1.x/2.x patched, follow-redirects 1.16.2, proxy-addr 2.0.8, express 4.22.3, qs 6.16.1.");
