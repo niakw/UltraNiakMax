@@ -1,47 +1,78 @@
 const axios = require("axios");
 
+const TTL_MS = 5 * 60 * 1000;
+const MAX_ENTRIES = 1000;
 const cache = new Map();
+const pending = new Map();
 
-async function fetchCached(url) {
-  if (cache.has(url)) return cache.get(url);
+function getCached(key) {
+  const entry = cache.get(key);
+  if (!entry) return { found: false };
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return { found: false };
+  }
+  // Refresh insertion order for bounded LRU eviction without one timer per request.
+  cache.delete(key);
+  cache.set(key, entry);
+  return { found: true, value: entry.value };
+}
 
-  const res = await axios.get(url, { timeout: 5000 });
+function storeCached(key, value) {
+  cache.delete(key);
+  cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
+  while (cache.size > MAX_ENTRIES) {
+    cache.delete(cache.keys().next().value);
+  }
+}
 
-  cache.set(url, res.data);
+function cachedRequest(key, request) {
+  const existing = getCached(key);
+  if (existing.found) return Promise.resolve(existing.value);
+  if (pending.has(key)) return pending.get(key);
 
-  setTimeout(() => cache.delete(url), 300000);
+  const task = Promise.resolve()
+    .then(request)
+    .then(value => {
+      storeCached(key, value);
+      return value;
+    })
+    .finally(() => pending.delete(key));
 
-  return res.data;
+  pending.set(key, task);
+  return task;
+}
+
+function fetchCached(url) {
+  return cachedRequest(`http:${url}`, async () => {
+    const response = await axios.get(url, { timeout: 5000 });
+    return response.data;
+  });
 }
 
 async function fetchTrakt(path, traktClientId) {
   if (!traktClientId) return [];
 
   const url = `https://api.trakt.tv${path}`;
-
-  if (cache.has(url)) return cache.get(url);
+  // Trakt responses may depend on client credentials. Never share their cache keys.
+  const key = `trakt:${traktClientId}:${url}`;
 
   try {
-    const res = await axios.get(url, {
-      timeout: 5000,
-      headers: {
-        "Content-Type": "application/json",
-        "trakt-api-version": "2",
-        "trakt-api-key": traktClientId
-      }
+    return await cachedRequest(key, async () => {
+      const response = await axios.get(url, {
+        timeout: 5000,
+        headers: {
+          "Content-Type": "application/json",
+          "trakt-api-version": "2",
+          "trakt-api-key": traktClientId
+        }
+      });
+      return response.data;
     });
-
-    cache.set(url, res.data);
-    setTimeout(() => cache.delete(url), 300000);
-
-    return res.data;
-  } catch (e) {
-    console.error("Trakt fetch error:", e.message);
+  } catch (error) {
+    console.error("Trakt fetch error:", error.message);
     return [];
   }
 }
 
-module.exports = {
-  fetchCached,
-  fetchTrakt
-};
+module.exports = { fetchCached, fetchTrakt };
