@@ -69,8 +69,7 @@
         (unknown.length > 12 ? "…" : "")));
     }
     results.appendChild(make("small",
-      "Seuls les catalogues reconnus sont importés. Un manifeste ne contient pas les clés API, " +
-      "les collections personnalisées privées ou les mots de passe. " +
+      "Seuls les catalogues reconnus sont importés. Les clés API, les filtres et les collections existantes restent conservés. " +
       "L'URL source et son jeton ne sont pas enregistrés."));
     el("eittyManifestImportApply").disabled = compatible.length === 0;
   }
@@ -112,32 +111,65 @@
     }
   }
   function applyPreview() {
-    if (!preview || !compatible.length || typeof importProjectData !== "function") return;
-    if (!window.confirm(
-      "Remplacer les sélections et le brouillon actuels par " +
-      compatible.length + " catalogues reconnus ? Les clés privées ne sont pas importées."
-    )) return;
+    if (!preview || !compatible.length) return;
+    var mode = el("eittyManifestImportMode").value;
+    var planner = window.UltraMaxCatalogImport;
+    var status = el("eittyManifestImportStatus");
+    if (!planner || typeof planner.planImport !== "function" ||
+        typeof selected === "undefined" || typeof hidden === "undefined") {
+      status.textContent = "Le gestionnaire de catalogues n'est pas disponible.";
+      return;
+    }
+    var plan;
     try {
-      var ids = compatible.map(function (cat) { return cat.id; });
-      importProjectData({
-        version: 1,
-        setup: {},
-        selectedCatalogs: ids,
-        hiddenCatalogs: [],
-        catalogOrder: ids,
-        collections: [],
-        mergedCatalogs: [],
-        removedMergedCatalogIds: []
+      plan = planner.planImport({
+        mode: mode,
+        imported: compatible.map(function (cat) { return cat.id; }),
+        selected: Array.from(selected),
+        hidden: Array.from(hidden),
+        order: Array.isArray(catalogOrder) ? catalogOrder : []
       });
-      if (typeof saveDraftState === "function") saveDraftState();
-      closeModal();
-      if (typeof showBanner === "function") showBanner(
-        "Catalogues importés : " + ids.length +
-        ". Complète les fournisseurs, collections et identifiants dans ton nouveau profil.", "success");
     } catch (error) {
-      el("eittyManifestImportStatus").textContent = "Import impossible : vérifie la configuration actuelle.";
+      status.textContent = "Préparation impossible : " + (error.message || "catalogues invalides");
+      return;
+    }
+    var message = mode === "replace"
+      ? "Remplacer les catalogues sélectionnés et masquer les anciens ? Les collections et clés existantes restent conservées."
+      : "Ajouter " + plan.added + " nouveaux catalogues sans effacer les paramètres, les collections ni les clés API ?";
+    if (!window.confirm(message)) return;
+    // Do not call importProjectData here: that API resets the entire form,
+    // including private credentials, debrid settings and custom collections.
+    selected.clear();
+    plan.selected.forEach(function (id) { selected.add(id); });
+    hidden.clear();
+    plan.hidden.forEach(function (id) { hidden.add(id); });
+    catalogOrder = plan.order;
+    document.querySelectorAll(".pill[data-id]").forEach(function (pill) {
+      var id = pill.getAttribute("data-id");
+      pill.classList.toggle("selected", selected.has(id));
+      var isHidden = hidden.has(id);
+      pill.style.fontStyle = isHidden ? "italic" : "";
+      var eye = pill.querySelector(".pill-eye");
+      if (eye) {
+        eye.style.display = isHidden ? "inline" : "none";
+        eye.textContent = isHidden ? "🙈" : "👁";
+        eye.style.opacity = isHidden ? "1" : "0.4";
+      }
+    });
+    if (typeof saveHiddenState === "function") saveHiddenState();
+    if (typeof updateCounter === "function") updateCounter();
+    if (typeof updateCategoryCounts === "function") updateCategoryCounts();
+    if (typeof renderCollections === "function") renderCollections();
+    if (typeof saveDraftState === "function") saveDraftState();
+    closeModal();
+    if (typeof showBanner === "function") {
+      showBanner(mode === "merge"
+        ? "Catalogue(s) ajouté(s) : " + plan.added + ". Paramètres et collections conservés."
+        : "Sélection mise à jour : " + plan.selected.length + " catalogues. Paramètres privés conservés.",
+        "success");
     }
   }
+
   function initialize() {
     if (!el("step1Toolbar") || el("eittyManifestImportModal")) return;
     var button = make("button", "Importer un manifeste");
@@ -187,6 +219,21 @@
     var results = make("div");
     results.id = "eittyManifestImportResults";
     content.appendChild(results);
+    var modeLabel = make("label", "Méthode d'importation");
+    modeLabel.setAttribute("for", "eittyManifestImportMode");
+    modeLabel.style.cssText = "display:block;margin-top:14px;margin-bottom:6px;font-weight:600";
+    content.appendChild(modeLabel);
+    var modeSelect = make("select");
+    modeSelect.id = "eittyManifestImportMode";
+    modeSelect.style.cssText = "padding:10px 12px;max-width:100%;color:#fff;background:#272139;border:1px solid #665b86;border-radius:8px";
+    [["merge", "Ajouter sans effacer (recommandé)"],
+     ["replace", "Remplacer uniquement les catalogues sélectionnés"]].forEach(function (option) {
+      var item = make("option", option[1]);
+      item.value = option[0];
+      modeSelect.appendChild(item);
+    });
+    content.appendChild(modeSelect);
+    content.appendChild(make("p", "Les clés, les filtres et les collections personnalisées ne sont jamais réinitialisés par l'import du manifeste."));
     var buttons = make("div");
     buttons.style.cssText = "display:flex;gap:12px;justify-content:flex-end;margin-top:16px";
     var cancel = make("button", "Annuler");
