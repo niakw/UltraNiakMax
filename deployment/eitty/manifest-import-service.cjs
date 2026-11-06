@@ -72,7 +72,7 @@ function registerManifestImportRoutes(app, options = {}) {
     try {
       const input = req.body && req.body.url;
       const { url } = validateTarget(input);
-      if (!/\\/manifest\\.json$/i.test(url.pathname)) {
+      if (!url.pathname.toLowerCase().endsWith("/manifest.json")) {
         return res.status(400).json({ error: "Enter a full HTTPS manifest.json URL." });
       }
       const upstream = await fetchManifest(url.toString(), {
