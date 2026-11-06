@@ -40,9 +40,9 @@ function verifyPassword(password, encoded) {
     const expected=Buffer.from(parts[2],"hex");
     // Compatibility transform only: never saved as a password verifier.
     // The stored verifier is the *salted scrypt* result, not a fast SHA hash.
-    // codeql[js/insufficient-password-hash]: SHA-256 is solely the historical
-    // format adapter, with its output passed into memory-hard scrypt.
+    // Old SHA-256 is only an input transform for scrypt, never a stored verifier.
     const input=scheme==="legacy-scrypt" ?
+      // codeql[js/insufficient-password-hash] Historical format adapter, then salted scrypt; never stored as password hash.
       crypto.createHash("sha256").update(password+LEGACY_SALT).digest() :
       password;
     const actual=crypto.scryptSync(input,parts[1],expected.length);
