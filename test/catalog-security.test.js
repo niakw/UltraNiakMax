@@ -31,7 +31,7 @@ function setup() {
  registerConfigRoutes(app,{loadConfigs:()=>configs,saveConfigs:()=>{writes++;},
   hashPassword,verifyPassword,generateToken:()=>"0123456789ABCDEF0123456789ABCDEF",
   rateLimit:()=>false});
- const res=()=>({code:200,status(n){this.code=n;return this;},json(data){this.body=data;return this;}});
+ const res=()=>({code:200,headers:{},setHeader(k,v){this.headers[k]=v;return this;},status(n){this.code=n;return this;},json(data){this.body=data;return this;}});
  return {routes,configs,res,token,getWrites:()=>writes};
 }
 test("collection writes require password and reject pollution",()=>{
@@ -48,4 +48,18 @@ test("collection writes require password and reject pollution",()=>{
  assert.equal(fn(malicious,res()).code,400);
  assert.equal(Object.prototype.isAdmin,undefined);
  assert.equal(fn({...req,params:{token:"__proto__"}},res()).code,404);
+});
+
+test("public manifest token cannot read private provider keys",()=>{
+ const {routes,res,token,configs}=setup();
+ configs[token].mdblistKey="PRIVATE_KEY";
+ const read=res();routes["GET /c/:token/config"]({params:{token}},read);
+ assert.equal(read.code,200);assert.equal(read.body.mdblistKey,undefined);
+ const privateRead=routes["POST /c/:token/config/auth"];
+ const denied=res();privateRead({params:{token},body:{password:"incorrect"}},denied);
+ assert.equal(denied.code,401);
+ const authorized=res();privateRead({params:{token},body:{password:"strong-password"}},authorized);
+ assert.equal(authorized.code,200);
+ assert.equal(authorized.body.mdblistKey,"PRIVATE_KEY");
+ assert.match(authorized.headers["Cache-Control"],/no-store/);
 });

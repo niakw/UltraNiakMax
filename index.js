@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
+const {rateLimit: expressRateLimit}=require("express-rate-limit");
 const { CATALOG_DEFS } = require("./catalogs/catalog-defs");
 const { QUICK_PICK_CATALOGS } = require("./catalogs/quick-picks");
 const { DYNAMIC_CATALOGS } = require("./catalogs/dynamic-catalogs");
@@ -74,6 +75,8 @@ const catalogRouteDeps = {
 
 
 const app = express();
+const apiLimiter=expressRateLimit({windowMs:60000,limit:60,standardHeaders:"draft-8",legacyHeaders:false});
+const assetsLimiter=expressRateLimit({windowMs:60000,limit:120,standardHeaders:"draft-8",legacyHeaders:false});
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 0));
 // Consistent noindex on HTML, manifests, images and HTTP error responses.
 app.use(applySearchExclusion);
@@ -111,6 +114,7 @@ registerStatsRoutes(app, {
 
 app.post(
   "/api/stream-wizard/check",
+  apiLimiter,
   checkStreamWizard
 );
 
@@ -147,7 +151,7 @@ app.get("/stats", (req, res) => {
   }
 });
 
-app.get("/assets", (req, res) => {
+app.get("/assets", assetsLimiter, (req, res) => {
   const fs = require("fs");
 
   const imagesDir = process.env.IMAGES_DIR || path.join(__dirname, "images");
@@ -318,7 +322,7 @@ app.use("/images", express.static(path.join(__dirname,"images"), { maxAge: '7d',
 
 app.get("/collections.json", (req, res) => { res.sendFile(path.join(__dirname,"collections.json")); });
 
-app.post("/api/ai/custom-row", async (req, res) => {
+app.post("/api/ai/custom-row", apiLimiter, async (req, res) => {
   try {
     const { prompt, count = 1, googleAiKey, traktUser = null, language: rowLanguage = "en-US" } = req.body || {};
     const watchRegion = (rowLanguage.split("-")[1] || "US").toUpperCase();
@@ -528,7 +532,7 @@ app.get("/c/:token/stream/:type/:id.json", async (req, res) => {
   res.json(result);
 });
 
-app.get("/preview/tmdb", handleTmdbPreview);
+app.get("/preview/tmdb", assetsLimiter, handleTmdbPreview);
 
 // On startup: remove configs not accessed in 180 days
 (function cleanupStaleConfigs() {

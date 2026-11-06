@@ -1,4 +1,6 @@
 "use strict";
+const {rateLimit: expressRateLimit}=require("express-rate-limit");
+const authLimiter=expressRateLimit({windowMs:60000,limit:30,standardHeaders:"draft-8",legacyHeaders:false});
 const reservedTokens=new Set(["__proto__","prototype","constructor"]);
 function recordForToken(configs,token) {
   if(typeof token!=="string" || token.length<6 || token.length>80 ||
@@ -26,7 +28,7 @@ function registerConfigRoutes(app, deps) {
     rateLimit
   } = deps;
 
-  app.post("/c/create", (req, res) => {
+  app.post("/c/create", authLimiter, (req, res) => {
     const ip = req.ip || req.socket.remoteAddress;
 
     if (rateLimit(ip, 5, 60000)) {
@@ -94,7 +96,7 @@ function registerConfigRoutes(app, deps) {
     res.json({ token });
   });
 
-  app.post("/c/:token/update", (req, res) => {
+  app.post("/c/:token/update", authLimiter, (req, res) => {
     const { token } = req.params;
 
     const {
@@ -185,17 +187,24 @@ function registerConfigRoutes(app, deps) {
     res.json({ token });
   });
 
-  app.get("/c/:token/config", (req, res) => {
-    const { token } = req.params;
-    const configs = loadConfigs();
-    const config=recordForToken(configs,token);
-
-    if (!config) {
-      return res.status(404).json({
-        error: "Not found"
-      });
-    }
-
+  // Public manifest URLs never reveal saved provider credentials.
+  app.get("/c/:token/config", (req,res)=>{
+    const configs=loadConfigs(),config=recordForToken(configs,req.params.token);
+    if(!config) return res.status(404).json({error:"Not found"});
+    res.setHeader("Cache-Control","private, no-store");
+    return res.json({
+      catalogs:config.catalogs || [],language:config.language || "en-US",
+      enableAiRecommended:!!config.enableAiRecommended,
+      excludeUnreleased:!!config.excludeUnreleased,
+      maxRating:config.maxRating || null
+    });
+  });
+  app.post("/c/:token/config/auth",authLimiter,(req,res)=>{
+    const configs=loadConfigs(),config=recordForToken(configs,req.params.token);
+    if(!config) return res.status(404).json({error:"Not found"});
+    if(!verifyPassword(req.body?.password,config.passwordHash))
+      return res.status(401).json({error:"Incorrect password"});
+    res.setHeader("Cache-Control","private, no-store");
     res.json({
       catalogs: config.catalogs,
       mdblistKey: config.mdblistKey,
@@ -213,7 +222,6 @@ function registerConfigRoutes(app, deps) {
       enableAiRecommended: !!config.enableAiRecommended
     });
   });
-
   app.get("/debug/config/:token", (req, res) => {
     const { token } = req.params;
     const configs = loadConfigs();
@@ -276,7 +284,7 @@ function registerConfigRoutes(app, deps) {
     });
   });
 
-  app.post("/c/:token/collections", (req, res) => {
+  app.post("/c/:token/collections", authLimiter, (req, res) => {
     const { token } = req.params;
     const configs = loadConfigs();
     const config=recordForToken(configs,token);
