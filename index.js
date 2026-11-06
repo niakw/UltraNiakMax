@@ -18,7 +18,7 @@ const { getImdbId, getMovieCertification, filterByMaxRating, imdbToTmdbMovieId, 
 const { geminiAiRecommendations, tmdbResolveAiItems } = require("./services/ai-service");
 const PORT = process.env.PORT || 7000;
 const TMDB_KEY = process.env.TMDB_KEY;
-const MDBLIST_KEYS = (process.env.MDBLIST_KEYS || process.env.MDBLIST_KEY || "5woimia0xf19uqr4rd7wl1960").split(",").map(k => k.trim()).filter(Boolean);
+const MDBLIST_KEYS = (process.env.MDBLIST_KEYS || process.env.MDBLIST_KEY || "").split(",").map(k => k.trim()).filter(Boolean);
 const MDBLIST_KEY = MDBLIST_KEYS[0];
 const TRAKT_CLIENT_ID = process.env.TRAKT_CLIENT_ID;
 const FILTER_ENABLED = process.env.FILTER_MODE !=="off";
@@ -159,7 +159,7 @@ app.get("/health", (req, res) => { res.status(200).json({ ok: true, service: "ul
 app.get("/trending", (req, res) => {
   const fs = require("fs");
   try {
-    const configs = JSON.parse(fs.readFileSync("/home/ubuntu/ultramax-landing/addon/configs.json", "utf8"));
+    const configs = loadConfigs();
     const counts = {};
     for(const token of Object.values(configs)){
       const catalogs = token.catalogs || [];
@@ -180,7 +180,7 @@ app.get("/trending", (req, res) => {
 app.get("/stats", (req, res) => {
   const fs = require("fs");
   try {
-    const configs = JSON.parse(fs.readFileSync("/home/ubuntu/ultramax-landing/addon/configs.json", "utf8"));
+    const configs = loadConfigs();
     res.json({ users: Object.keys(configs).length });
   } catch(e) {
     res.json({ users: 0 });
@@ -190,9 +190,10 @@ app.get("/stats", (req, res) => {
 app.get("/assets", (req, res) => {
   const fs = require("fs");
 
+  const imagesDir = process.env.IMAGES_DIR || path.join(__dirname, "images");
   const folders = [
-    { label: "Main", dir: process.env.IMAGES_DIR || "/home/ubuntu/images", prefix: "/images/" },
-    { label: "Quick", dir: "/home/ubuntu/ultramax-landing/images/quick", prefix: "/images/quick/" }
+    { label: "Main", dir: imagesDir, prefix: "/images/" },
+    { label: "Quick", dir: path.join(imagesDir, "quick"), prefix: "/images/quick/" }
   ];
 
   let allFiles = [];
@@ -331,13 +332,14 @@ document.querySelectorAll('button[data-url]').forEach(function(btn){
 });
 ;
 
+app.get("/", (req, res) => res.redirect("/configure"));
 app.get("/configure", (req, res) => { res.setHeader("Cache-Control","public, max-age=300"); res.sendFile(path.join(__dirname,"configure.html")); });
 app.get("/configure/:token", (req, res) => { res.setHeader("Cache-Control","public, max-age=300"); res.sendFile(path.join(__dirname,"configure.html")); });
 app.get("/c/:token/configure", (req, res) => { res.redirect(`/configure/${req.params.token}`); });
 app.get("/logo.svg", (req, res) => { res.sendFile(path.join(__dirname,"logo.svg")); });
 app.get("/collections-builder", (req, res) => { res.sendFile(path.join(__dirname,"collections-builder.html")); });
 app.use("/images", express.static(path.join(__dirname,"images"), { maxAge: '7d', etag: true }));
-app.use("/images/quick", express.static("/home/ubuntu/ultramax-landing/images/quick", { maxAge: '7d', etag: true }));
+
 app.get("/collections.json", (req, res) => { res.sendFile(path.join(__dirname,"collections.json")); });
 
 app.post("/api/ai/custom-row", async (req, res) => {
@@ -530,19 +532,8 @@ app.get("/c/:token/meta/:type/:id.json", (req, res) =>
 );
 
 app.get("/meta/:type/:id.json", async (req, res) => {
-  const { type, id } = req.params;
-  try {
-    const tmdbType = type ==="series" ?"tv" :"movie";
-    const findRes = await fetchCached(`https://api.themoviedb.org/3/find/${id}?api_key=${TMDB_KEY}&external_source=imdb_id`);
-    const result = findRes[`${tmdbType}_results`]?.[0];
-    if (!result) return res.json({ meta: { id, type } });
-    const tmdbId = result.id;
-    const d = await fetchCached(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${TMDB_KEY}&append_to_response=credits`);
-    if (!d) return res.json({ meta: { id, type } });
-    const cast = (d.credits?.cast || []).slice(0, 5).map(c => c.name);
-    const meta = { id, type, name: d.title || d.name, description: d.overview, poster: d.poster_path ? `https://image.tmdb.org/t/p/w500${d.poster_path}` : null, background: d.backdrop_path ? `https://image.tmdb.org/t/p/original${d.backdrop_path}` : null, releaseInfo: d.release_date ? d.release_date.split("-")[0] : d.first_air_date ? d.first_air_date.split("-")[0] : null, imdbRating: d.vote_average ? d.vote_average.toFixed(1) : null, genres: (d.genres || []).map(g => g.name), cast };
-    res.json({ meta });
-  } catch (e) { res.json({ meta: { id, type } }); }
+  const result = await handleMetaRequest(req.params, { TMDB_KEY, fetchCached });
+  res.json(result);
 });
 
 app.get("/stream/:type/:id.json", async (req, res) => {
@@ -588,7 +579,7 @@ app.get("/preview/tmdb", handleTmdbPreview);
 })();
 
 const PREWARM_LISTS = ['92337','91304','91303','91302','91300','91301','86710','88307','88309','3087','3091'];
-setTimeout(async () => {
+if (MDBLIST_KEY) setTimeout(async () => {
   console.log('Pre-warming MDBList cache...');
   for (const id of PREWARM_LISTS) {
     try {
