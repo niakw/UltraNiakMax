@@ -55,9 +55,9 @@ function handleNuvioManifest(req, res, deps) {
   }));
 
   return res.json({
-    id: "com.ultramax.nuvio." + token.toLowerCase(),
+    id: "com.niakw.ultramax.nuvio." + token.toLowerCase(),
     version: "7.0.0",
-    name: "Ultra MAX",
+    name: "Ultra MAX (niakw)",
     description: "Ultra MAX Nuvio compatible manifest",
     logo: "https://ultramax.vip/logo.svg",
     types: ["movie", "series"],
@@ -130,9 +130,9 @@ const {
   }
 
   const manifest = {
-    id: "com.ultramax",
+    id: "com.niakw.ultramax." + token.toLowerCase(),
     version: "7.0.0",
-    name: "Ultra MAX",
+    name: "Ultra MAX (niakw)",
     description: `Ultra MAX setup with ${config.catalogs.length} curated rows. Built for cleaner discovery and smoother browsing.`,
     logo: "https://ultramax.vip/logo.svg",
     types: ["movie", "series"],
