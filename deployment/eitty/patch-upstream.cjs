@@ -60,6 +60,12 @@ function apply(root) {
       rewriteWebText(fs.readFileSync(legacyConfigure, "utf8")), "utf8");
   }
 
+  // Never let user-supplied manifest URLs access Docker/private infrastructure.
+  const publicFetchSource = path.join(__dirname, "public-fetch.cjs");
+  if (!fs.existsSync(publicFetchSource)) throw new Error("Missing public-fetch.cjs");
+  fs.writeFileSync(path.join(addon, "utils/public-fetch.js"),
+    fs.readFileSync(publicFetchSource, "utf8"), "utf8");
+
   let addonFiles = 0;
   walk(addon, filepath => {
     if (!filepath.endsWith(".js")) return;
@@ -78,6 +84,24 @@ function apply(root) {
         'if (url.hostname !== "ultramax.vip" && url.origin !== new URL(process.env.BASE_URL).origin) return false;');
       final = final.replace("url.pathname.match(",
         'url.pathname.replace(/^\\/projects-site\\/ultra-max/, "").match(');
+    }
+    if (filepath.endsWith("/services/stream-wizard-service.js")) {
+      const oldFetch = "await fetch(manifestUrl, {";
+      if (!final.includes(oldFetch)) throw new Error("Stream wizard fetch signature changed");
+      final = 'const { fetchPublicHttps } = require("../utils/public-fetch");\n' +
+        final.replace(oldFetch, "await fetchPublicHttps(manifestUrl, {");
+    }
+    if (filepath.endsWith("/services/stream-bridge.js")) {
+      const oldMeta = "const m = await fetchCached(manifestUrl);";
+      const oldStreams = "await fetch(url, { signal: controller.signal })";
+      if (!final.includes(oldMeta) || final.split(oldStreams).length !== 3) {
+        throw new Error("Stream bridge fetch signatures changed");
+      }
+      final = 'const { fetchPublicHttps } = require("../utils/public-fetch");\n' +
+        final.replace(oldMeta,
+          "const remote = await fetchPublicHttps(manifestUrl);\n    const m = remote.ok ? await remote.json() : null;")
+          .replaceAll(oldStreams,
+            "await fetchPublicHttps(url, { signal: controller.signal })");
     }
     if (final !== original) fs.writeFileSync(filepath, final, "utf8");
     addonFiles += 1;
