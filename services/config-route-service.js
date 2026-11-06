@@ -222,18 +222,20 @@ function registerConfigRoutes(app, deps) {
       enableAiRecommended: !!config.enableAiRecommended
     });
   });
-  app.get("/debug/config/:token", (req, res) => {
+  app.get("/debug/config/:token", (_req, res) =>
+    res.status(410).json({error:"Authenticated debug endpoint required"}));
+  app.post("/debug/config/:token", authLimiter, (req, res) => {
     const { token } = req.params;
     const configs = loadConfigs();
     const config=recordForToken(configs,token);
 
     if (!config) {
-      return res.status(404).json({
-        ok: false,
-        error: "Config not found",
-        token
-      });
+      return res.status(404).json({ok:false,error:"Config not found"});
     }
+    if (!verifyPassword(req.body?.password,config.passwordHash)) {
+      return res.status(401).json({error:"Incorrect password"});
+    }
+    res.setHeader("Cache-Control","private, no-store");
 
     const redact = value => {
       if (!value) return null;
