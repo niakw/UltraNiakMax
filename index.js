@@ -6,6 +6,7 @@ const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
 const {rateLimit: expressRateLimit}=require("express-rate-limit");
+const {createAssetCatalog}=require("./services/artwork-catalog");
 const { CATALOG_DEFS } = require("./catalogs/catalog-defs");
 const { QUICK_PICK_CATALOGS } = require("./catalogs/quick-picks");
 const { DYNAMIC_CATALOGS } = require("./catalogs/dynamic-catalogs");
@@ -151,25 +152,12 @@ app.get("/stats", (req, res) => {
   }
 });
 
+// File-system scans occur at startup and on a timer, never on an HTTP request.
+const artworkCatalog = createAssetCatalog(
+  process.env.IMAGES_DIR || path.join(__dirname,"images")
+);
 app.get("/assets", assetsLimiter, (req, res) => {
-  const fs = require("fs");
-
-  const imagesDir = process.env.IMAGES_DIR || path.join(__dirname, "images");
-  const folders = [
-    { label: "Main", dir: imagesDir, prefix: "/images/" },
-    { label: "Quick", dir: path.join(imagesDir, "quick"), prefix: "/images/quick/" }
-  ];
-
-  let allFiles = [];
-  for(const folder of folders){
-    try {
-      const files = fs.readdirSync(folder.dir)
-        .filter(f => /\.(png|jpe?g|webp|gif|svg)$/i.test(f))
-        .sort()
-        .map(f => ({ name: f, label: folder.label, url: folder.prefix + encodeURIComponent(f) }));
-      allFiles = allFiles.concat(files);
-    } catch(e) {}
-  }
+  const allFiles = artworkCatalog.list();
 
   const mode = req.query.mode || 'cover';
   const ci = req.query.ci || '';
