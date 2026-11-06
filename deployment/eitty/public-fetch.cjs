@@ -45,9 +45,9 @@ function validateTarget(input) {
 async function fetchPublicHttps(input, { signal, headers = {}, timeout = 10000,
   maxBytes = 4 * 1024 * 1024 } = {}) {
   const { url, hostname } = validateTarget(input);
-  const records = await dns.lookup(hostname, { all: true });
+  const records = await dns.lookup(hostname, { all: true, family: 4 });
   if (!records.length || records.some(r => r.family !== 4 || !isPublicIPv4(r.address))) {
-    throw new Error("External addon hostname did not resolve to public IPv4 only");
+    throw new Error("External addon hostname did not resolve to public IPv4");
   }
   const pinnedIp = records[0].address;
   const agent = new https.Agent({
