@@ -1,25 +1,29 @@
-const { fetchCached } = require("./api-helpers");
+const {fetchPublicHttps,validateTarget}=require("../deployment/eitty/public-fetch.cjs");
 
 const STREAM_BRIDGE_TIMEOUT_MS = 8000;
-
-function normaliseManifestUrl(url) {
-  if (!url) return null;
-  let u = String(url).trim();
-  if (!u) return null;
-  if (!/^https?:\/\//i.test(u)) u = "https://" + u;
-  // Support both:
-  // https://host/config/manifest.json
-  // https://host/configmanifest.json
-  if (/manifest\.json(?:\?.*)?$/i.test(u) && !/\/manifest\.json(?:\?.*)?$/i.test(u)) {
-    u = u.replace(/manifest\.json(?:\?.*)?$/i, "/manifest.json");
-  }
-
-  if (!/\/manifest\.json(?:\?.*)?$/i.test(u)) return null;
-  return u;
+function normaliseManifestUrl(value) {
+  if (typeof value!=="string" || !value.trim() || value.length>4096) return null;
+  try {
+    const raw=value.trim();
+    const input=raw.startsWith("https://") ? raw : "https://" + raw;
+    const {url}=validateTarget(input);
+    if (url.pathname.endsWith("manifest.json") &&
+        !url.pathname.endsWith("/manifest.json")) {
+      url.pathname=url.pathname.slice(0,-"manifest.json".length)+"/manifest.json";
+    }
+    if (!url.pathname.endsWith("/manifest.json")) return null;
+    return url.toString();
+  } catch {return null;}
 }
-
-function streamUrlFromManifest(manifestUrl, type, id) {
-  return manifestUrl.replace(/\/manifest\.json(?:\?.*)?$/i, `/stream/${type}/${id}.json`);
+function streamUrlFromManifest(manifestUrl,type,id) {
+  const {url}=validateTarget(manifestUrl);
+  const t=String(type), item=String(id);
+  if (!/^(movie|series|channel|tv)$/.test(t) || item.length>250 ||
+      !/^[A-Za-z0-9_:.-]+$/.test(item)) throw Error("Invalid stream resource");
+  url.pathname=url.pathname.slice(0,-"/manifest.json".length)+
+    "/stream/"+encodeURIComponent(t)+"/"+encodeURIComponent(item)+".json";
+  url.search="";
+  return url.toString();
 }
 
 // Stream addon manifest URLs embed the user's config (often including
@@ -30,45 +34,23 @@ function redactUrlForLog(url) {
   );
 }
 
-async function fetchStreamAddonName(manifestUrl) {
-  try {
-    const m = await fetchCached(manifestUrl);
-    return m && m.name ? String(m.name).trim() : "External";
-  } catch (e) {
-    return "External";
-  }
-}
-
-async function fetchStreamsFromAddon(manifestUrl, type, id) {
-  const cleanManifest = normaliseManifestUrl(manifestUrl);
+async function fetchStreamsFromAddon(manifestUrl,type,id) {
+  const cleanManifest=normaliseManifestUrl(manifestUrl);
   if (!cleanManifest) return [];
-
-  const url = streamUrlFromManifest(cleanManifest, type, id);
-  const addonName = await fetchStreamAddonName(cleanManifest);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), STREAM_BRIDGE_TIMEOUT_MS);
-
+  let url;
+  try {url=streamUrlFromManifest(cleanManifest,type,id);}
+  catch {return [];}
   try {
-    console.log("STREAM BRIDGE CALL", redactUrlForLog(url));
-    const resp = await fetch(url, { signal: controller.signal });
-    console.log("STREAM BRIDGE STATUS", resp.status, redactUrlForLog(url));
-    if (!resp.ok) return [];
-
-    const data = await resp.json();
-    const streams = Array.isArray(data.streams) ? data.streams : [];
-
-    return streams.map(stream => ({
-      ...stream
-    }));
-  } catch (e) {
-    console.log("STREAM BRIDGE ERROR", e.message, redactUrlForLog(url));
-    return [];
-  } finally {
-    clearTimeout(timer);
-  }
+    const response=await fetchPublicHttps(url,{
+      timeout:STREAM_BRIDGE_TIMEOUT_MS,maxBytes:2*1024*1024
+    });
+    if (!response.ok) return [];
+    const data=await response.json();
+    if (!data || !Array.isArray(data.streams)) return [];
+    return data.streams.filter(x=>x && typeof x==="object").slice(0,100)
+      .map(stream=>({...stream}));
+  }catch {return [];}
 }
-
 
 function streamQualityScore(stream) {
   const nameText = String(stream.name || '').toLowerCase();

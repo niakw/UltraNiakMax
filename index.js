@@ -1,6 +1,5 @@
 require('dotenv').config();
 
-const { addonBuilder } = require("stremio-addon-sdk");
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
@@ -43,20 +42,6 @@ const { applySearchExclusion, ROBOTS_TXT } = require("./utils/search-exclusion")
 if (!TMDB_KEY) { console.error("TMDB_KEY missing - exiting"); process.exit(1); }
 
 const staticIds = getStaticIds( CATALOG_DEFS, FILTER_ENABLED );
-const builder = new addonBuilder({
-
-  id: FILTER_ENABLED ?"org.kris.ultra.max.v5" :"org.kris.ultra.max.all.v5",
-  version:"7.0.0",
-  logo: "https://ultramax.vip/logo.svg",
-  name: FILTER_ENABLED ?"Ultra MAX" :"Ultra MAX All",
-  description:"Premium curated catalogs for Stremio and Nuvio. Fast discovery, cleaner collections, and smarter rows.",
-  types: ["movie","series"],
-  resources: ["catalog","meta","stream"],
-  catalogs: [
-    { type:"movie",  id:"ultramax_placeholder", name:"Ultra MAX", extra: [{ name:"skip", isRequired: false }] }
-  ]
-});
-
 const catalogDeps = {
   TMDB_KEY,
   TRAKT_CLIENT_ID,
@@ -88,52 +73,23 @@ const catalogRouteDeps = {
 };
 
 
-builder.defineCatalogHandler(async ({ type, id, extra }) => {
-  console.log("SDK HANDLER:", id, extra);
-try {
-  return await handleCatalogService(
-    id,
-    type,
-    extra,
-    null,
-    FILTER_ENABLED,
-    "en-US",
-    null,
-    null,
-    null,
-    false,
-    null,
-    [],
-    null,
-    null,
-    null,
-    catalogDeps
-  );
-}
-
-  catch (e) { console.log("catalog error", id, e.message); return { metas: [] }; }
-});
-
-builder.defineStreamHandler(async () => ({ streams: [] }));
-
-builder.defineMetaHandler(async ({ type, id }) => {
-  return await handleMetaRequest(
-    { type, id },
-    {
-      TMDB_KEY,
-      fetchCached
-    }
-  );
-});
-
-const addonInterface = builder.getInterface();
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 0));
 // Consistent noindex on HTML, manifests, images and HTTP error responses.
 app.use(applySearchExclusion);
 app.get("/robots.txt", (_req, res) => res.type("text/plain").send(ROBOTS_TXT));
 app.use((req, res, next) => { res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Headers", "*"); res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS"); if (req.method === "OPTIONS") return res.sendStatus(200); next(); });
-app.use(express.json());
+app.use(express.json({limit:"2mb"}));
+// Protect every write operation, including AI and remote manifest probes.
+app.use((req, res, next) => {
+  if (req.method !== "POST") return next();
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  if (rateLimit("post:" + ip, 60, 60000)) {
+    res.setHeader("Retry-After", "60");
+    return res.status(429).json({error:"Too many requests"});
+  }
+  next();
+});
 registerCatalogRoutes(app, catalogRouteDeps);
 registerConfigRoutes(app, {
   loadConfigs,

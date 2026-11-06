@@ -1,3 +1,13 @@
+async function strictTmdbJson(input) {
+  const url=new URL(input);
+  if (url.origin!=="https://api.themoviedb.org" ||
+      !url.pathname.startsWith("/3/")) throw Error("Unsafe TMDB target");
+  const response=await fetch(url.toString(),{
+    redirect:"error",signal:AbortSignal.timeout(8000)
+  });
+  if (!response.ok) throw Error("TMDB response failed");
+  return response.json();
+}
 const previewCache = new Map();
 
 async function handleTmdbPreview(req, res) {
@@ -25,7 +35,11 @@ async function handleTmdbPreview(req, res) {
       }
     }
 
-    const tmdbType = type === 'series' ? 'tv' : type;
+    if (!["movie","series"].includes(type) ||
+        [query,person].some(x=>typeof x!=="string" || x.length>120)) {
+      return res.status(400).json({error:"Invalid preview parameters"});
+    }
+    const tmdbType = type === 'series' ? 'tv' : 'movie';
 
     const params = new URLSearchParams({
       api_key: process.env.TMDB_KEY,
@@ -67,11 +81,7 @@ async function handleTmdbPreview(req, res) {
         page: '1'
       });
 
-      const pr = await fetch(
-        `https://api.themoviedb.org/3/search/person?${personParams.toString()}`
-      );
-
-      const pj = await pr.json();
+      const pj = await strictTmdbJson(`https://api.themoviedb.org/3/search/person?${personParams.toString()}`);
       const bestPerson = (pj.results || [])[0];
 
       if (bestPerson && bestPerson.id) {
@@ -93,11 +103,7 @@ async function handleTmdbPreview(req, res) {
           page: '1'
         });
 
-        const cr = await fetch(
-          `https://api.themoviedb.org/3/search/collection?${collectionParams.toString()}`
-        );
-
-        const cj = await cr.json();
+        const cj = await strictTmdbJson(`https://api.themoviedb.org/3/search/collection?${collectionParams.toString()}`);
 
         const q = String(query).toLowerCase().trim();
 
@@ -113,11 +119,7 @@ async function handleTmdbPreview(req, res) {
         });
 
         if (collection && collection.id) {
-          const fr = await fetch(
-            `https://api.themoviedb.org/3/collection/${collection.id}?api_key=${process.env.TMDB_KEY}`
-          );
-
-          const fj = await fr.json();
+          const fj = await strictTmdbJson(`https://api.themoviedb.org/3/collection/${encodeURIComponent(String(Number(collection.id)))}?api_key=${process.env.TMDB_KEY}`);
 
           let parts = fj.parts || [];
 
@@ -149,8 +151,7 @@ async function handleTmdbPreview(req, res) {
             `https://api.themoviedb.org/3/discover/${tmdbType}?${params.toString()}`;
         }
 
-        const r = await fetch(url);
-        j = await r.json();
+        j = await strictTmdbJson(url);
       }
     }
 

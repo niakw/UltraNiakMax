@@ -1,0 +1,41 @@
+name: Refresh dependency lockfile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dependency-lockfile-main
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Recreate lockfile from the audited direct dependency list
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit lockfile if changed
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo "No lockfile change required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "build(security): prune unused vulnerable SDK dependency tree"
+          git push origin HEAD:main

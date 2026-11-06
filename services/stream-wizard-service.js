@@ -1,3 +1,4 @@
+const {fetchPublicHttps,validateTarget}=require("../deployment/eitty/public-fetch.cjs");
 async function checkStreamWizard(req, res) {
   try {
     const manifestUrl = String(req.body?.manifestUrl || '').trim();
@@ -9,25 +10,21 @@ async function checkStreamWizard(req, res) {
       });
     }
 
-    if (!/^https?:\/\/.+\/manifest\.json(\?.*)?$/i.test(manifestUrl)) {
+    let target;
+    try {
+      target=validateTarget(manifestUrl);
+      if (!target.url.pathname.endsWith("/manifest.json")) throw Error("Invalid path");
+    } catch {
       return res.status(400).json({
-        ok: false,
-        error: 'That does not look like a Stremio manifest URL. It should end with /manifest.json'
+        ok:false,
+        error:"Only public HTTPS Stremio manifest URLs ending with /manifest.json are supported"
       });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    const r = await fetch(manifestUrl, {
-      method: 'GET',
-      headers: {
-        'User-Agent': 'UltraMAX-StreamWizard/1.0'
-      },
-      signal: controller.signal
+    const r = await fetchPublicHttps(target.url.toString(), {
+      timeout:8000, maxBytes:512*1024,
+      headers:{"User-Agent":"UltraMAX-StreamWizard/1.0"}
     });
-
-    clearTimeout(timeout);
 
     const raw = await r.text();
 
@@ -115,10 +112,7 @@ async function checkStreamWizard(req, res) {
   } catch (err) {
     return res.status(500).json({
       ok: false,
-      error:
-        err.name === 'AbortError'
-          ? 'Manifest check timed out'
-          : String(err.message || err)
+      error: 'Manifest check failed: public HTTPS host or response unavailable'
     });
   }
 }
