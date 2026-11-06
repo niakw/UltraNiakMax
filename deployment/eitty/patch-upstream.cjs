@@ -92,6 +92,227 @@ function apply(root) {
     importerSelectionMarker);
   fs.writeFileSync(projectImporterPath, projectImporter, "utf8");
 
+  
+  // Personal collection writes must never be authorized by the public
+  // manifest token alone. The manifest token is shared with Stremio/Nuvio.
+  const collectionRoutePath = path.join(addon, "services/config-route-service.js");
+  let collectionRoute = fs.readFileSync(collectionRoutePath, "utf8");
+  const collectionRouteMarker = [
+    '  app.post("/c/:token/collections", async (req, res) => {',
+    '    const { token } = req.params;',
+    '    const config = await readConfig(token);',
+    '',
+    '    if (!config) {',
+    '      return res.status(404).json({',
+    '        error: "Not found"',
+    '      });',
+    '    }'
+  ].join("\n");
+  if (collectionRoute.split(collectionRouteMarker).length !== 2) {
+    throw new Error("Collection write auth target changed upstream");
+  }
+  const collectionRouteAuthenticated = collectionRouteMarker + [
+    '',
+    '    // This token is intentionally public in manifest URLs; it cannot grant write access.',
+    '    if (!config.passwordHash) return res.status(403).json({ error: "Password setup required" });',
+    '    const writePassword = String(req.get("x-config-password") || "");',
+    '    if (!writePassword) return res.status(401).json({ error: "Password required" });',
+    '    if (passwordRateLimited(req, res, token)) return;',
+    '    if (!await verifyStoredPassword(token, writePassword, config)) {',
+    '      return res.status(401).json({ error: "Incorrect password" });',
+    '    }',
+    '    clearKey(token);'
+  ].join("\n");
+  collectionRoute = collectionRoute.replace(collectionRouteMarker, collectionRouteAuthenticated);
+  // An install token is public. Never permit it to reset an account password.
+  const resetMarker = [
+    '  app.post("/c/:token/reset-password", async (req, res) => {',
+    '    const { token } = req.params;'
+  ].join("\n");
+  if (collectionRoute.split(resetMarker).length !== 2) {
+    throw new Error("Password reset target changed upstream");
+  }
+  collectionRoute = collectionRoute.replace(resetMarker, resetMarker + [
+    '',
+    '    const currentConfig = await readConfig(token);',
+    '    if (!currentConfig) return res.status(404).json({ error: "Token not found" });',
+    '    if (!currentConfig.passwordHash) return res.status(403).json({ error: "Password setup required" });',
+    '    const currentPassword = String(req.get("x-config-password") || "");',
+    '    if (!currentPassword) return res.status(401).json({ error: "Current password required" });',
+    '    if (passwordRateLimited(req, res, token)) return;',
+    '    if (!await verifyStoredPassword(token, currentPassword, currentConfig)) {',
+    '      return res.status(401).json({ error: "Incorrect current password" });',
+    '    }',
+    '    clearKey(token);'
+  ].join("\n"));
+
+  // Debug account introspection must be authenticated too.
+  const debugMarker = [
+    '  app.get("/debug/config/:token", async (req, res) => {',
+    '    const { token } = req.params;',
+    '    const config = await readConfig(token);',
+    '',
+    '    if (!config) {',
+    '      return res.status(404).json({',
+    '        ok: false,',
+    '        error: "Config not found",',
+    '        token',
+    '      });',
+    '    }'
+  ].join("\n");
+  if (collectionRoute.split(debugMarker).length !== 2) {
+    throw new Error("Debug config target changed upstream");
+  }
+  collectionRoute = collectionRoute.replace(debugMarker, debugMarker + [
+    '',
+    '    if (!config.passwordHash) return res.status(403).json({ error: "Password setup required" });',
+    '    const diagnosticPassword = String(req.get("x-config-password") || "");',
+    '    if (!diagnosticPassword) return res.status(401).json({ error: "Current password required" });',
+    '    if (passwordRateLimited(req, res, token)) return;',
+    '    if (!await verifyStoredPassword(token, diagnosticPassword, config)) {',
+    '      return res.status(401).json({ error: "Incorrect password" });',
+    '    }',
+    '    clearKey(token);'
+  ].join("\n"));
+
+  // Account password change stays available with an existing authenticated
+  // setup, but token-only "forgot password" no longer grants takeover.
+  const passwordHelpersPath = path.join(web, "setup-modules/password-helpers.js");
+  let passwordHelpers = fs.readFileSync(passwordHelpersPath, "utf8");
+  const resetUiHeader = "method:'POST', headers:{'Content-Type':'application/json'},";
+  if (passwordHelpers.split(resetUiHeader).length !== 2) {
+    throw new Error("Password helper reset request changed upstream");
+  }
+  passwordHelpers = passwordHelpers.replace(resetUiHeader,
+    "method:'POST', headers:{'Content-Type':'application/json', 'x-config-password': (document.getElementById('password')?.value || (typeof _configPassword === 'string' ? _configPassword : ''))},");
+  fs.writeFileSync(passwordHelpersPath, passwordHelpers, "utf8");
+  const passwordLoadPath = path.join(web, "setup-modules/setup-load-controller.js");
+  let passwordLoad = fs.readFileSync(passwordLoadPath, "utf8");
+  const modalReset = "method: 'POST', headers: {'Content-Type':'application/json'},";
+  if (passwordLoad.split(modalReset).length !== 2) {
+    throw new Error("Password modal reset request changed upstream");
+  }
+  passwordLoad = passwordLoad.replace(modalReset,
+    "method: 'POST', headers: {'Content-Type':'application/json', 'x-config-password': (typeof _configPassword === 'string' ? _configPassword : '')},");
+  fs.writeFileSync(passwordLoadPath, passwordLoad, "utf8");
+
+  fs.writeFileSync(collectionRoutePath, collectionRoute, "utf8");
+
+  // A known manifest token must never permit Fusion share creation or
+  // revocation. Public read-only share endpoints remain usable by clients.
+  const fusionRoutePath = path.join(addon, "services/fusion-route-service.js");
+  let fusionRoute = fs.readFileSync(fusionRoutePath, "utf8");
+  const fusionRegisterMarker =
+    '  const { loadConfigs, readConfig = async token => loadConfigs()[token], rateLimit } = deps;';
+  if (fusionRoute.split(fusionRegisterMarker).length !== 2) {
+    throw new Error("Fusion route registration changed upstream");
+  }
+  fusionRoute = fusionRoute.replace(fusionRegisterMarker,
+    fusionRegisterMarker + [
+      '',
+      '  const { verifyPassword } = require("../utils/auth");',
+      '  function authorizeFusionWrite(req, res, config) {',
+      '    if (!config?.passwordHash) { res.status(403).json({ error: "Password setup required" }); return false; }',
+      '    const password = String(req.get("x-config-password") || "");',
+      '    if (!password) { res.status(401).json({ error: "Current password required" }); return false; }',
+      '    const ip = req.headers["x-real-ip"] || req.socket.remoteAddress;',
+      '    if (rateLimit("fusion-auth:" + String(ip), 8, 60000)) {',
+      '      res.status(429).json({ error: "Too many authentication attempts" }); return false;',
+      '    }',
+      '    if (!verifyPassword(password, config.passwordHash)) {',
+      '      res.status(401).json({ error: "Incorrect password" }); return false;',
+      '    }',
+      '    return true;',
+      '  }'
+    ].join("\n"));
+  const fusionCreateMarker = [
+    '      const baseConfig = await readConfig(token);',
+    '      if (!baseConfig) return res.status(404).json({ error: "Setup not found" });',
+    '',
+    '      const rawProfileId = (req.body && req.body.profile) || req.query.profile || null;'
+  ].join("\n");
+  if (fusionRoute.split(fusionCreateMarker).length !== 2) {
+    throw new Error("Fusion share creation auth target changed upstream");
+  }
+  fusionRoute = fusionRoute.replace(fusionCreateMarker,
+    fusionCreateMarker.replace(
+      '      const rawProfileId',
+      '      if (!authorizeFusionWrite(req, res, baseConfig)) return;\n\n      const rawProfileId'));
+  const fusionStatusMarker = [
+    '  app.get("/c/:token/fusion/share", async (req, res) => {',
+    '    try {',
+    '      const { token } = req.params;',
+    '      if (!await readConfig(token)) return res.status(404).json({ error: "Setup not found" });'
+  ].join("\n");
+  if (fusionRoute.split(fusionStatusMarker).length !== 2) {
+    throw new Error("Fusion share listing target changed upstream");
+  }
+  fusionRoute = fusionRoute.replace(fusionStatusMarker,
+    fusionStatusMarker.replace(
+      '      if (!await readConfig(token)) return res.status(404).json({ error: "Setup not found" });',
+      '      const config = await readConfig(token);\n      if (!config) return res.status(404).json({ error: "Setup not found" });\n      if (!authorizeFusionWrite(req, res, config)) return;'));
+  const fusionRevokeMarker = [
+    '  app.post("/c/:token/fusion/share/revoke", async (req, res) => {',
+    '    try {',
+    '      const { token } = req.params;',
+    '      if (!await readConfig(token)) return res.status(404).json({ error: "Setup not found" });'
+  ].join("\n");
+  if (fusionRoute.split(fusionRevokeMarker).length !== 2) {
+    throw new Error("Fusion share revoke target changed upstream");
+  }
+  fusionRoute = fusionRoute.replace(fusionRevokeMarker,
+    fusionRevokeMarker.replace(
+      '      if (!await readConfig(token)) return res.status(404).json({ error: "Setup not found" });',
+      '      const config = await readConfig(token);\n      if (!config) return res.status(404).json({ error: "Setup not found" });\n      if (!authorizeFusionWrite(req, res, config)) return;'));
+  fs.writeFileSync(fusionRoutePath, fusionRoute, "utf8");
+
+  const fusionUiPath = path.join(web, "setup-modules/fusion-controller.js");
+  let fusionUi = fs.readFileSync(fusionUiPath, "utf8");
+  const fusionUiWriteHeader = "headers: { 'Content-Type': 'application/json' },";
+  if (fusionUi.split(fusionUiWriteHeader).length !== 3) {
+    throw new Error("Fusion UI write requests changed upstream");
+  }
+  fusionUi = fusionUi.replaceAll(fusionUiWriteHeader,
+    "headers: { 'Content-Type': 'application/json', 'x-config-password': (document.getElementById('password')?.value || (typeof _configPassword === 'string' ? _configPassword : '')) },");
+  const fusionStatusFetch = [
+    '          var res = await fetch(',
+    "            '/c/' + encodeURIComponent(token) + '/fusion/share' + fusionQuery()",
+    '          );'
+  ].join("\n");
+  if (fusionUi.split(fusionStatusFetch).length !== 2) {
+    throw new Error("Fusion share status UI changed upstream");
+  }
+  fusionUi = fusionUi.replace(fusionStatusFetch, [
+    '          var res = await fetch(',
+    "            '/c/' + encodeURIComponent(token) + '/fusion/share' + fusionQuery(),",
+    "            { headers: { 'x-config-password': (document.getElementById('password')?.value || (typeof _configPassword === 'string' ? _configPassword : '')) } }",
+    '          );'
+  ].join("\n"));
+  fs.writeFileSync(fusionUiPath, fusionUi, "utf8");
+
+  const writePasswordExpr = "(document.getElementById('password')?.value || (typeof _configPassword === 'string' ? _configPassword : ''))";
+  // Keep both the generated setup flow and subsequent edits functional.
+  const generationPath = path.join(web, "setup-modules/generation-controller.js");
+  let generation = fs.readFileSync(generationPath, "utf8");
+  const generationHeader = "headers: {'Content-Type':'application/json'},";
+  if (generation.split(generationHeader).length !== 3) {
+    throw new Error("Generation controller collection-write headers changed");
+  }
+  generation = generation.replaceAll(generationHeader,
+    "headers: {'Content-Type':'application/json', 'x-config-password': " + writePasswordExpr + "},");
+  fs.writeFileSync(generationPath, generation, "utf8");
+
+  const nuvioCollectionsPath = path.join(web, "setup-modules/nuvio-collections.js");
+  let nuvioCollections = fs.readFileSync(nuvioCollectionsPath, "utf8");
+  const nuvioHeader = "headers: {'Content-Type': 'application/json'},";
+  if (nuvioCollections.split(nuvioHeader).length !== 2) {
+    throw new Error("Nuvio collection save header changed upstream");
+  }
+  nuvioCollections = nuvioCollections.replace(nuvioHeader,
+    "headers: {'Content-Type': 'application/json', 'x-config-password': " + writePasswordExpr + "},");
+  fs.writeFileSync(nuvioCollectionsPath, nuvioCollections, "utf8");
+
+
   const setupPath = path.join(web, "setup.html");
   const setupBefore = fs.readFileSync(setupPath, "utf8");
   const projectImportScript = '<script src="/setup-modules/project-import.js?v=20260925-streamlangs1"></script>';
@@ -171,8 +392,25 @@ function apply(root) {
   if (backendIndex.split(routeMarker).length !== 2) {
     throw new Error("Could not locate express API registration for manifest import");
   }
+  // Immutable, content-addressed artwork for Nuvio / Stremio. It lives
+  // strictly in the persistent /data volume, never in the public source tree.
+  // Only images validated and written by the private VPS migration can exist
+  // under this path; the server does not expose a generic image-fetch proxy.
+  const artworkRouteLines = [
+    '',
+    'app.use("/images/user", express.static(path.join(process.env.DATA_DIR || "/data", "artwork", "user"), {',
+    '  fallthrough: false, immutable: true, maxAge: "365d", index: false,',
+    '  dotfiles: "deny",',
+    '  setHeaders(res) {',
+    '    res.setHeader("X-Content-Type-Options", "nosniff");',
+    '    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");',
+    '    res.setHeader("Referrer-Policy", "no-referrer");',
+    '  }',
+    '}));'
+  ].join("\n");
   fs.writeFileSync(backendIndexPath, backendIndex.replace(routeMarker,
-    routeMarker + '\nrequire("./services/manifest-import-service").registerManifestImportRoutes(app);'), "utf8");
+    routeMarker + artworkRouteLines +
+    '\nrequire("./services/manifest-import-service").registerManifestImportRoutes(app);'), "utf8");
 
   const index = fs.readFileSync(path.join(web, "index.html"), "utf8");
   const setup = fs.readFileSync(path.join(web, "setup.html"), "utf8");
