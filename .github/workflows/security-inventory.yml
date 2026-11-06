@@ -8,6 +8,7 @@ on:
       - package.json
       - package-lock.json
       - .github/workflows/security-inventory.yml
+      - SECURITY_REVIEW.md
       - index.js
       - configure.html
       - services/**
@@ -18,6 +19,7 @@ on:
       - package.json
       - package-lock.json
       - .github/workflows/security-inventory.yml
+      - SECURITY_REVIEW.md
       - index.js
       - configure.html
       - services/**
@@ -57,7 +59,7 @@ jobs:
               const url = base + "/" + kind + "/alerts?state=open&per_page=100&page=" + page;
               const response = await fetch(url, {headers, signal: AbortSignal.timeout(15000)});
               if (!response.ok) {
-                console.log(kind + ": not readable with workflow token (HTTP " + response.status + ")");
+                console.log("::warning::" + kind + " alerts cannot be inspected with workflow token (HTTP " + response.status + ")");
                 return;
               }
               const data = await response.json();
