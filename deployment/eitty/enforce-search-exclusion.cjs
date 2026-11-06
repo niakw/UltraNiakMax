@@ -27,14 +27,17 @@ function visit(folder) {
       throw new Error("HTML file has no <head> for noindex: " + path.relative(root, filepath));
     }
     const existing = /<meta\b[^>]*\bname\s*=\s*["']robots["'][^>]*>/ig;
-    const conflicts = [...html.matchAll(existing)];
-    if (conflicts.length > 0) {
-      throw new Error("Unexpected existing robots meta; review before replacing: " +
+    const current = [...html.matchAll(existing)];
+    if (current.length > 1 || current.some(tag => !/noindex/i.test(tag[0]))) {
+      throw new Error("Unexpected indexable/conflicting robots meta: " +
         path.relative(root, filepath));
     }
-    const result = html.replace(head, match => match +
-      "\n<meta name=\"robots\" content=\"" + policy + "\">\n" +
-      "<meta name=\"googlebot\" content=\"" + policy + "\">");
+    const normalized = current.length
+      ? html.replace(existing, '<meta name="robots" content="' + policy + '">')
+      : html;
+    const result = normalized.replace(head, match => match +
+      (current.length ? "" : "\n<meta name=\"robots\" content=\"" + policy + "\">") +
+      "\n<meta name=\"googlebot\" content=\"" + policy + "\">");
     if (result === html || !result.includes('name="robots" content="' + policy + '"')) {
       throw new Error("Failed to protect HTML page: " + filepath);
     }
