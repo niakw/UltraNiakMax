@@ -63,3 +63,19 @@ test("public manifest token cannot read private provider keys",()=>{
  assert.equal(authorized.body.mdblistKey,"PRIVATE_KEY");
  assert.match(authorized.headers["Cache-Control"],/no-store/);
 });
+
+test("legacy SHA-256 profiles are upgraded to scrypt after valid login",()=>{
+ const crypto=require("node:crypto");
+ const {routes,res,token,configs,getWrites}=setup();
+ configs[token].passwordHash=crypto.createHash("sha256")
+   .update("strong-password"+"ultramax_salt").digest("hex");
+ const r=res();
+ routes["POST /c/:token/config/auth"]({
+   params:{token},body:{password:"strong-password"}
+ },r);
+ assert.equal(r.code,200);
+ assert.match(configs[token].passwordHash,/^scrypt:/);
+ assert.equal(getWrites(),1);
+ assert.equal(verifyPassword("strong-password",configs[token].passwordHash),true);
+ assert.equal(verifyPassword("wrong",configs[token].passwordHash),false);
+});
