@@ -5,12 +5,28 @@ const path = require("node:path");
 const PREFIX = "/projects-site/ultra-max";
 const VALID_WEB_EXTENSIONS = new Set([".html", ".js", ".css", ".json", ".webmanifest"]);
 
+function stripHostedAnalytics(source) {
+  const opener = /<script\b[^>]*\bsrc=["']https:\/\/umami-maxbase\.duckdns\.org\/[^"']*["'][^>]*>/gi;
+  let result = "", from = 0, match;
+  while ((match = opener.exec(source)) !== null) {
+    const close = source.indexOf("</script>", opener.lastIndex);
+    if (close === -1 || source.slice(opener.lastIndex, close).trim()) {
+      throw new Error("Malformed upstream tracking script; refusing unsafe HTML rewrite");
+    }
+    result += source.slice(from, match.index);
+    from = close + "</script>".length;
+    opener.lastIndex = from;
+  }
+  return result + source.slice(from);
+}
+
 function rewriteWebText(source) {
   // Root-relative frontend links, API calls, SPA routes, service worker assets.
   let result = source.replace(/(["'\x60])\/(?!\/|projects-site\/ultra-max(?:\/|["'\x60]))/g, (_, quote) => quote + PREFIX + "/");
   result = result.replace(/url\(\s*\/(?!\/|projects-site\/ultra-max\/)/gi, "url(" + PREFIX + "/");
-  // No hosted-service tracking script.
-  result = result.replace(/<script\b[^>]*\bsrc=["']https:\/\/umami-maxbase\.duckdns\.org\/[^"']*["'][^>]*>\s*<\/script>/gi, "");
+  // Remove only exact, empty upstream analytics script elements.
+  // Reject malformed or nested tags instead of deleting partial markup.
+  result = stripHostedAnalytics(result);
   return result.replace(/\bcom\.ultramax\b/g, "com.niakw.ultramax");
 }
 
