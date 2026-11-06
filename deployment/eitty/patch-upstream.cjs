@@ -386,6 +386,122 @@ function apply(root) {
   ].join("\n"));
   fs.writeFileSync(fusionUiPath, fusionUi, "utf8");
 
+  // OAuth account status and disconnect are account-administration routes.
+  // Public Stremio/Nuvio install tokens must never authorize these APIs.
+  const oauthServicePath = path.join(addon, "services/auth-service.js");
+  let oauthService = fs.readFileSync(oauthServicePath, "utf8");
+  const oauthRegisterMarker = "function registerAuthRoutes(app, { loadConfigs,";
+  if (oauthService.split(oauthRegisterMarker).length !== 2) {
+    throw new Error("OAuth register function changed upstream");
+  }
+  oauthService = oauthService.replace(
+    "const { generateToken } = require('../utils/auth');",
+    "const { generateToken, verifyPassword } = require('../utils/auth');"
+  );
+  const oauthRouteStart = " }) {\n\n  app.get('/auth/capabilities'";
+  if (!oauthService.includes(oauthRouteStart)) {
+    throw new Error("OAuth insertion point changed upstream");
+  }
+  const oauthGuard = [
+    '  const oauthFailedAuth = new Map();',
+    '  function requireOAuthPassword(req, res, config) {',
+    '    if (!config || !config.passwordHash) {',
+    '      res.status(401).json({ error: "Account password required" }); return false;',
+    '    }',
+    '    const password = String(req.get("x-config-password") || "");',
+    '    if (!password || password.length > 512) {',
+    '      res.status(401).json({ error: "Account password required" }); return false;',
+    '    }',
+    '    const ip = String(req.get("x-real-ip") || req.socket.remoteAddress || "unknown");',
+    '    const identity = ip + ":" + String(req.params.token || "").slice(0, 40);',
+    '    const now = Date.now();',
+    '    if (oauthFailedAuth.size > 2000) {',
+    '      for (const [key, state] of oauthFailedAuth) {',
+    '        if (now - state.start > 60000) oauthFailedAuth.delete(key);',
+    '      }',
+    '      if (oauthFailedAuth.size > 2000) oauthFailedAuth.clear();',
+    '    }',
+    '    const state = oauthFailedAuth.get(identity);',
+    '    if (state && now - state.start < 60000 && state.count >= 8) {',
+    '      res.setHeader("Retry-After", "60");',
+    '      res.status(429).json({ error: "Too many authentication attempts" }); return false;',
+    '    }',
+    '    if (!verifyPassword(password, config.passwordHash)) {',
+    '      oauthFailedAuth.set(identity, state && now - state.start < 60000',
+    '        ? { start: state.start, count: state.count + 1 }',
+    '        : { start: now, count: 1 });',
+    '      res.status(401).json({ error: "Invalid account password" }); return false;',
+    '    }',
+    '    oauthFailedAuth.delete(identity);',
+    '    return true;',
+    '  }',
+    ''
+  ].join("\n");
+  oauthService = oauthService.replace(oauthRouteStart,
+    " }) {\n\n" + oauthGuard + "\n  app.get('/auth/capabilities'");
+  for (const provider of ["trakt", "simkl", "mal", "anilist"]) {
+    const disconnectStart = [
+      "  app.post('/auth/" + provider + "/disconnect/:token', async (req, res) => {",
+      '    const { token } = req.params;'
+    ].join("\n");
+    if (oauthService.split(disconnectStart).length !== 2) {
+      throw new Error("OAuth disconnect changed upstream: " + provider);
+    }
+    oauthService = oauthService.replace(disconnectStart, disconnectStart + [
+      '',
+      '    const account = await readConfig(token);',
+      '    if (!account) return res.status(404).json({ ok: false });',
+      '    if (!requireOAuthPassword(req, res, account)) return;'
+    ].join("\n"));
+
+    const statusStart = [
+      "  app.get('/auth/" + provider + "/status/:token', async (req, res) => {",
+      '    const { token } = req.params;'
+    ].join("\n");
+    if (oauthService.split(statusStart).length !== 2) {
+      throw new Error("OAuth status changed upstream: " + provider);
+    }
+    oauthService = oauthService.replace(statusStart,statusStart + [
+      '',
+      '    const account = await readConfig(token);',
+      '    if (!account) return res.status(404).json({ ok: false });',
+      '    if (!requireOAuthPassword(req, res, account)) return;'
+    ].join("\n"));
+  }
+  fs.writeFileSync(oauthServicePath, oauthService, "utf8");
+
+  const oauthUiPath = path.join(web, "setup-modules/integrations-oauth.js");
+  let oauthUi = fs.readFileSync(oauthUiPath, "utf8");
+  const oauthPasswordHeaders = "{ 'x-config-password': (document.getElementById('password')?.value || (typeof _configPassword === 'string' ? _configPassword : '')) }";
+  // These four providers each have a distinct fetch call with a simple
+  // options argument, so the patch fails if upstream changes that contract.
+  const disconnectTargets = [
+    "fetch('/auth/trakt/disconnect/' + token + umProfileQuery(), {method:'POST'})",
+    "fetch('/auth/simkl/disconnect/'+token + umProfileQuery(), {method:'POST'})",
+    "fetch('/auth/mal/disconnect/'+token, {method:'POST'})",
+    "fetch('/auth/anilist/disconnect/'+token, {method:'POST'})"
+  ];
+  for (const target of disconnectTargets) {
+    if (oauthUi.split(target).length !== 2) throw new Error("OAuth UI disconnect changed upstream");
+    oauthUi = oauthUi.replace(target,
+      target.replace("{method:'POST'}", "{method:'POST', headers: " + oauthPasswordHeaders + "}"));
+  }
+  const statusOption = "{cache:'no-store'}";
+  const statusRegex = /fetch\([^;\n]*\/auth\/(?:trakt|simkl|mal|anilist)\/status\/[^;\n]*\{cache:'no-store'\}\)/g;
+  const statusMatches = [...oauthUi.matchAll(statusRegex)];
+  if (statusMatches.length !== 5) {
+    throw new Error("OAuth UI status fetch count changed upstream: " + statusMatches.length);
+  }
+  oauthUi = oauthUi.replace(statusRegex, original => original.replace(statusOption,
+    "{cache:'no-store', headers: " + oauthPasswordHeaders + "}"));
+  const unsafeUsername = "status.innerHTML = umT('setup.nuvioPushWidget.connectedAsPrefix', '✅ Connected as <strong>')+(state.username||'')+'</strong>'";
+  if (oauthUi.split(unsafeUsername).length !== 2) {
+    throw new Error("OAuth status markup sanitizer target changed");
+  }
+  oauthUi = oauthUi.replace(unsafeUsername,
+    "status.textContent = 'Connected as ' + String(state.username||'Account')");
+  fs.writeFileSync(oauthUiPath, oauthUi, "utf8");
+
   const writePasswordExpr = "(document.getElementById('password')?.value || (typeof _configPassword === 'string' ? _configPassword : ''))";
   // Keep both the generated setup flow and subsequent edits functional.
   const generationPath = path.join(web, "setup-modules/generation-controller.js");
