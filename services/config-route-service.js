@@ -3,12 +3,13 @@ function registerConfigRoutes(app, deps) {
     loadConfigs,
     saveConfigs,
     hashPassword,
+    verifyPassword,
     generateToken,
     rateLimit
   } = deps;
 
   app.post("/c/create", (req, res) => {
-    const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+    const ip = req.ip || req.socket.remoteAddress;
 
     if (rateLimit(ip, 5, 60000)) {
       return res.status(429).json({ error: "Too many requests." });
@@ -105,10 +106,15 @@ function registerConfigRoutes(app, deps) {
       });
     }
 
-    if (configs[token].passwordHash !== hashPassword(password)) {
+    if (!verifyPassword(password, configs[token].passwordHash)) {
       return res.status(401).json({
         error: "Incorrect password"
       });
+    }
+
+    // Migrate existing legacy hashes only after a successful password check.
+    if (!String(configs[token].passwordHash).startsWith("scrypt:")) {
+      configs[token].passwordHash = hashPassword(password);
     }
 
     configs[token].catalogs = catalogs !== undefined ? catalogs : (configs[token].catalogs || []);
