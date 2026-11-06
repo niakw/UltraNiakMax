@@ -1,0 +1,44 @@
+"use strict";
+const {test}=require("node:test");
+const assert=require("node:assert/strict");
+const fs=require("node:fs");
+const os=require("node:os");
+const path=require("node:path");
+const {getOwnProfile,updatedLastAccess}=require("../services/manifest-route-service");
+test("manifest state disallows reserved tokens and prototype objects",()=>{
+ const configs=Object.assign(Object.create(null),{
+  ABCDEF12:{catalogs:["top"],createdAt:"2025-01-01"},
+  "__proto__":{catalogs:["danger"]}
+ });
+ assert.equal(getOwnProfile(configs,"__proto__"),null);
+ assert.equal(getOwnProfile(configs,"constructor"),null);
+ assert.deepEqual(getOwnProfile(configs,"ABCDEF12").catalogs,["top"]);
+ assert.equal(getOwnProfile(configs,"invalid!"),null);
+ const upgraded=updatedLastAccess(configs,"ABCDEF12",getOwnProfile(configs,"ABCDEF12"));
+ assert.equal(Object.getPrototypeOf(upgraded),null);
+ assert.match(upgraded.ABCDEF12.lastAccessed,/^\d{4}-/);
+ assert.equal(configs.ABCDEF12.lastAccessed,undefined);
+ assert.equal(Object.prototype.lastAccessed,undefined);
+});
+test("config store returns a null-prototype map even on first read",()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),"ultramax-config-test-"));
+ const file=path.join(dir,"configs.json"),prior=process.env.CONFIGS_FILE;
+ try {
+  fs.writeFileSync(file,'{"ABCDEF12":{"catalogs":[]},"__proto__":{"hacked":true}}');
+  process.env.CONFIGS_FILE=file;
+  const resolved=require.resolve("../utils/config-store");
+  delete require.cache[resolved];
+  const {loadConfigs,saveConfigs}=require("../utils/config-store");
+  const configs=loadConfigs();
+  assert.equal(Object.getPrototypeOf(configs),null);
+  assert.equal(Object.prototype.hacked,undefined);
+  assert.equal(Object.hasOwn(configs,"__proto__"),true);
+  saveConfigs(configs);
+  assert.equal(Object.getPrototypeOf(loadConfigs()),null);
+  delete require.cache[resolved];
+ }finally {
+  if(prior===undefined)delete process.env.CONFIGS_FILE;
+  else process.env.CONFIGS_FILE=prior;
+  fs.rmSync(dir,{force:true,recursive:true});
+ }
+});

@@ -20,7 +20,7 @@ function loadConfigs() {
     // Null prototype: token keys cannot mutate an inherited prototype.
     configCache = Object.assign(Object.create(null), parsed);
     configCacheMtime = mtime;
-    return parsed;
+    return configCache;
   } catch (error) {
     if (error.code === "ENOENT") return configCache || Object.create(null);
     // Don't erase existing configurations after a corrupt file or I/O failure.
@@ -42,7 +42,7 @@ function saveConfigs(configs) {
       flag: "wx"
     });
     fs.renameSync(tempFile, CONFIGS_FILE);
-    configCache = configs;
+    configCache = Object.assign(Object.create(null), configs);
     configCacheMtime = fs.statSync(CONFIGS_FILE).mtimeMs;
   } finally {
     try { fs.unlinkSync(tempFile); } catch (error) {

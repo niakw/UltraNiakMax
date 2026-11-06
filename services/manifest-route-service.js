@@ -1,16 +1,20 @@
-function updateLastAccess(config) {
-  if (!config || typeof config !== "object" || Array.isArray(config) ||
-      Object.getPrototypeOf(config) !== Object.prototype) return false;
-  if (
-    !config.lastAccessed ||
-    Date.now() - new Date(config.lastAccessed).getTime() >
-      24 * 60 * 60 * 1000
-  ) {
-    config.lastAccessed = new Date().toISOString();
-    return true;
-  }
+function getOwnProfile(configs,token) {
+  if(typeof token!=="string" || !/^[A-Za-z0-9_-]{6,80}$/.test(token) ||
+     ["__proto__","constructor","prototype"].includes(token.toLowerCase()) ||
+     !Object.prototype.hasOwnProperty.call(configs,token)) return null;
+  const value=configs[token];
+  if(!value || typeof value!=="object" || Array.isArray(value) ||
+      Object.getPrototypeOf(value)!==Object.prototype) return null;
+  return value;
+}
 
-  return false;
+function updatedLastAccess(configs,token,profile) {
+  if(profile.lastAccessed && Number.isFinite(Date.parse(profile.lastAccessed)) &&
+      Date.now()-Date.parse(profile.lastAccessed)<=24*60*60*1000) return null;
+  const refreshed={...profile,lastAccessed:new Date().toISOString()};
+  return Object.assign(Object.create(null),
+    Object.fromEntries(Object.entries(configs).map(([key,value])=>
+      [key,key===token?refreshed:value])));
 }
 
 function handleNuvioManifest(req, res, deps) {
@@ -24,15 +28,14 @@ function handleNuvioManifest(req, res, deps) {
 
   const { token } = req.params;
   const configs = loadConfigs();
-  const config = Object.prototype.hasOwnProperty.call(configs, token) ? configs[token] : null;
+  const config = getOwnProfile(configs,token);
 
   if (!config) {
     return res.status(404).json({ error: "Config not found" });
   }
 
-  if (updateLastAccess(config)) {
-    saveConfigs(configs);
-  }
+  const changed=updatedLastAccess(configs,token,config);
+  if(changed) saveConfigs(changed);
 
   const catalogs = buildCatalogsFromIds(
     config.enableAiRecommended
@@ -119,15 +122,14 @@ const {
 
   const { token } = req.params;
   const configs = loadConfigs();
-  const config = Object.prototype.hasOwnProperty.call(configs, token) ? configs[token] : null;
+  const config = getOwnProfile(configs,token);
 
   if (!config) {
     return res.status(404).json({ error: "Config not found" });
   }
 
-  if (updateLastAccess(config)) {
-    saveConfigs(configs);
-  }
+  const changed=updatedLastAccess(configs,token,config);
+  if(changed) saveConfigs(changed);
 
   const manifest = {
     id: "com.niakw.ultramax." + token.toLowerCase(),
@@ -190,5 +192,7 @@ const {
 module.exports = {
   handleNuvioManifest,
   handleCinemetaClone,
-  handleMainManifest
+  handleMainManifest,
+  getOwnProfile,
+  updatedLastAccess
 };
