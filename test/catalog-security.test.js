@@ -67,8 +67,11 @@ test("public manifest token cannot read private provider keys",()=>{
 test("legacy SHA-256 profiles are upgraded to scrypt after valid login",()=>{
  const crypto=require("node:crypto");
  const {routes,res,token,configs,getWrites}=setup();
- configs[token].passwordHash=crypto.createHash("sha256")
-   .update("strong-password"+"ultramax_salt").digest("hex");
+ const {strengthenLegacyPasswordHash}=require("../utils/auth");
+ configs[token].passwordHash=strengthenLegacyPasswordHash(crypto.createHash("sha256")
+   .update("strong-password"+"ultramax_salt").digest("hex"));
+ assert.equal(verifyPassword("wrong",configs[token].passwordHash),false);
+ assert.equal(verifyPassword("strong-password",configs[token].passwordHash),true);
  const r=res();
  routes["POST /c/:token/config/auth"]({
    params:{token},body:{password:"strong-password"}

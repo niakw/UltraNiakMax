@@ -42,3 +42,34 @@ test("config store returns a null-prototype map even on first read",()=>{
   fs.rmSync(dir,{force:true,recursive:true});
  }
 });
+
+test("stored fast legacy hashes are atomically rewrapped in salted scrypt",()=>{
+ const crypto=require("node:crypto");
+ const {verifyPassword}=require("../utils/auth");
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),"ultramax-legacy-test-"));
+ const file=path.join(dir,"configs.json");
+ const prior=process.env.CONFIGS_FILE;
+ try {
+   const digest=crypto.createHash("sha256").update("test-password"+"ultramax_salt").digest("hex");
+   fs.writeFileSync(file,JSON.stringify({ABCDEF12:{passwordHash:digest,catalogs:["movie"],mdblistKey:"PRIVATE_TEST_KEY"}}));
+   process.env.CONFIGS_FILE=file;
+   const resolved=require.resolve("../utils/config-store");
+   delete require.cache[resolved];
+   const {loadConfigs}=require("../utils/config-store");
+   const loaded=loadConfigs();
+   assert.match(loaded.ABCDEF12.passwordHash,/^legacy-scrypt:/);
+   assert.equal(verifyPassword("test-password",loaded.ABCDEF12.passwordHash),true);
+   assert.equal(verifyPassword("wrong",loaded.ABCDEF12.passwordHash),false);
+   assert.equal(verifyPassword("test-password",digest),false);
+   assert.equal(loaded.ABCDEF12.mdblistKey,"PRIVATE_TEST_KEY");
+   const disk=JSON.parse(fs.readFileSync(file,"utf8"));
+   assert.equal(disk.ABCDEF12.passwordHash,loaded.ABCDEF12.passwordHash);
+   assert.ok(!fs.readFileSync(file,"utf8").includes(digest));
+   assert.equal(loadConfigs().ABCDEF12.passwordHash,loaded.ABCDEF12.passwordHash);
+   delete require.cache[resolved];
+ }finally{
+   if(prior===undefined) delete process.env.CONFIGS_FILE;
+   else process.env.CONFIGS_FILE=prior;
+   fs.rmSync(dir,{recursive:true,force:true});
+ }
+});

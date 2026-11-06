@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const {strengthenLegacyPasswordHash}=require("./auth");
 
 const CONFIGS_FILE = path.resolve(
   process.env.CONFIGS_FILE || path.join(__dirname, "..", "configs.json")
@@ -18,8 +19,25 @@ function loadConfigs() {
       throw new Error("Invalid configurations file");
     }
     // Null prototype: token keys cannot mutate an inherited prototype.
-    configCache = Object.assign(Object.create(null), parsed);
-    configCacheMtime = mtime;
+    const safe=Object.assign(Object.create(null), parsed);
+    let migrated=0;
+    for(const [token,record] of Object.entries(safe)) {
+      if(!/^[A-Za-z0-9_-]{6,80}$/.test(token) ||
+          !record || typeof record!=="object" || Array.isArray(record)) continue;
+      if(typeof record.passwordHash==="string" &&
+         /^[0-9a-f]{64}$/i.test(record.passwordHash)) {
+        safe[token]={...record,passwordHash:strengthenLegacyPasswordHash(record.passwordHash)};
+        migrated++;
+      }
+    }
+    if(migrated) {
+      // Atomically replace legacy fast hashes before handing out a config.
+      // No plaintext password, install token, catalog or provider setting changes.
+      saveConfigs(safe);
+      return configCache;
+    }
+    configCache=safe;
+    configCacheMtime=mtime;
     return configCache;
   } catch (error) {
     if (error.code === "ENOENT") return configCache || Object.create(null);
