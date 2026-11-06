@@ -489,11 +489,19 @@ function apply(root) {
   const statusOption = "{cache:'no-store'}";
   const statusRegex = /fetch\([^;\n]*\/auth\/(?:trakt|simkl|mal|anilist)\/status\/[^;\n]*\{cache:'no-store'\}\)/g;
   const statusMatches = [...oauthUi.matchAll(statusRegex)];
-  if (statusMatches.length !== 5) {
+  if (statusMatches.length !== 4) {
     throw new Error("OAuth UI status fetch count changed upstream: " + statusMatches.length);
   }
   oauthUi = oauthUi.replace(statusRegex, original => original.replace(statusOption,
     "{cache:'no-store', headers: " + oauthPasswordHeaders + "}"));
+  const dynamicOAuthStatus =
+    "fetch('/auth/'+provider+'/status/'+token+umProfileQuery(profileId),{cache:'no-store'})";
+  if (oauthUi.split(dynamicOAuthStatus).length !== 2) {
+    throw new Error("OAuth dynamic status check changed upstream");
+  }
+  oauthUi = oauthUi.replace(dynamicOAuthStatus,
+    dynamicOAuthStatus.replace(statusOption,
+      "{cache:'no-store', headers: " + oauthPasswordHeaders + "}"));
   const unsafeUsername = "status.innerHTML = umT('setup.nuvioPushWidget.connectedAsPrefix', '✅ Connected as <strong>')+(state.username||'')+'</strong>'";
   if (oauthUi.split(unsafeUsername).length !== 2) {
     throw new Error("OAuth status markup sanitizer target changed");
