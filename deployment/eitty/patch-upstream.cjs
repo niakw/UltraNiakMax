@@ -30,6 +30,57 @@ function apply(root) {
     throw new Error("Expected official UltraMax self-host source tree");
   }
 
+  // New accounts must not use the upstream 32-bit install tokens.
+  // Existing eight-character installs remain valid and unchanged.
+  const tokenSourcePath = path.join(addon, "utils/auth.js");
+  let tokenSource = fs.readFileSync(tokenSourcePath, "utf8");
+  const weakGenerator = ".randomBytes(4)";
+  if (tokenSource.split(weakGenerator).length !== 2) {
+    throw new Error("Upstream install token generator changed");
+  }
+  tokenSource = tokenSource.replace(weakGenerator, ".randomBytes(16)");
+  fs.writeFileSync(tokenSourcePath, tokenSource, "utf8");
+
+  const tokenCompat = [
+    ["web/builder.html",
+      "token.length !== 8",
+      "![8, 32].includes(token.length)"],
+    ["web/setup-modules/nuvio-token-prefill.js",
+      "/^[A-Z0-9]{8}$/",
+      "/^(?:[A-Z0-9]{8}|[A-F0-9]{32})$/"],
+    ["web/delete-account.html",
+      "/^[A-Z0-9]{8}$/",
+      "/^(?:[A-Z0-9]{8}|[A-F0-9]{32})$/"],
+    ["addon/services/account-deletion-service.js",
+      "/^[A-Z0-9]{8}$/",
+      "/^(?:[A-Z0-9]{8}|[A-F0-9]{32})$/"],
+    ["web/home-nuvio-controller.js",
+      "/^[A-Z0-9]{8}$/",
+      "/^(?:[A-Z0-9]{8}|[A-F0-9]{32})$/"],
+    ["web/setup-modules/v2-nuvio-install-bridge.js",
+      "([A-Z0-9]{8})",
+      "([A-Z0-9]{8}|[A-F0-9]{32})"],
+    ["web/gallery.html",
+      "([A-Z0-9]{8})",
+      "([A-Z0-9]{8}|[A-F0-9]{32})"]
+  ];
+  for (const [relative, before, after] of tokenCompat) {
+    const filepath = path.join(root, relative);
+    let current = fs.readFileSync(filepath, "utf8");
+    if (!current.includes(before)) {
+      throw new Error("Token compatibility matcher changed upstream: " + relative);
+    }
+    current = current.replaceAll(before, after);
+    if (relative === "web/builder.html") {
+      current = current.replace("Please enter a valid 8-character token",
+        "Please enter a valid Ultra MAX setup token");
+    } else if (relative === "web/delete-account.html") {
+      current = current.replace("Enter a valid 8-character Ultra MAX token.",
+        "Enter a valid Ultra MAX setup token.");
+    }
+    fs.writeFileSync(filepath, current, "utf8");
+  }
+
   const seasonPaths = [
     path.join(addon, "services/meta-route-service.js"),
     path.join(addon, "services/meta-handler-service.js")
@@ -47,6 +98,7 @@ function apply(root) {
   // Reproducible, privacy-preserving manifest import: both UI and API.
   const importFiles = [
     ["manifest-link-import.js", path.join(web, "setup-modules/manifest-link-import.js")],
+    ["catalog-import-planner.js", path.join(web, "setup-modules/catalog-import-planner.js")],
     ["portable-profile-normalizer.js", path.join(web, "setup-modules/portable-profile-normalizer.js")],
     ["manifest-import-service.cjs", path.join(addon, "services/manifest-import-service.js")]
   ];
@@ -196,6 +248,50 @@ function apply(root) {
     "method: 'POST', headers: {'Content-Type':'application/json', 'x-config-password': (typeof _configPassword === 'string' ? _configPassword : '')},");
   fs.writeFileSync(passwordLoadPath, passwordLoad, "utf8");
 
+  // Device profiles can carry provider API keys inside publicOverrides.
+  // A manifest token alone must never reveal that list or the overrides.
+  const deviceListMarker = [
+    '  app.get("/c/:token/profiles", async (req, res) => {',
+    '    const { token } = req.params;',
+    '    const config = await readConfig(token);',
+    '',
+    '    if (!config) return res.status(404).json({ error: "Not found" });'
+  ].join("\n");
+  if (collectionRoute.split(deviceListMarker).length !== 2) {
+    throw new Error("Device profile list target changed upstream");
+  }
+  collectionRoute = collectionRoute.replace(deviceListMarker, deviceListMarker + [
+    '',
+    '    if (!config.passwordHash) return res.status(401).json({ error: "Password required" });',
+    '    const listPassword = String(req.get("x-config-password") || "");',
+    '    if (!listPassword) return res.status(401).json({ error: "Password required" });',
+    '    if (passwordRateLimited(req, res, token)) return;',
+    '    if (!await verifyStoredPassword(token, listPassword, config)) {',
+    '      return res.status(401).json({ error: "Incorrect password" });',
+    '    }',
+    '    clearKey(token);'
+  ].join("\n"));
+
+  const deviceProfilesPath = path.join(web, "setup-modules/device-profiles.js");
+  let deviceProfiles = fs.readFileSync(deviceProfilesPath, "utf8");
+  const profileListFetch = "    const res = await fetch(API_BASE + '/c/' + token + '/profiles');";
+  if (deviceProfiles.split(profileListFetch).length !== 2) {
+    throw new Error("Device profile list UI target changed upstream");
+  }
+  deviceProfiles = deviceProfiles.replace(profileListFetch, [
+    "    const currentPassword = (document.getElementById('password')?.value ||",
+    "      (typeof _configPassword === 'string' ? _configPassword : ''));",
+    "    if (!currentPassword) {",
+    "      listEl.textContent = 'Saisis le mot de passe du profil pour afficher les appareils.';",
+    "      return;",
+    "    }",
+    "    const res = await fetch(API_BASE + '/c/' + token + '/profiles', {",
+    "      headers: { 'x-config-password': currentPassword },",
+    "      cache: 'no-store', credentials: 'same-origin'",
+    "    });",
+    "    if (!res.ok) throw new Error('Profile list requires a valid password');"
+  ].join("\n"));
+  fs.writeFileSync(deviceProfilesPath, deviceProfiles, "utf8");
   fs.writeFileSync(collectionRoutePath, collectionRoute, "utf8");
 
   // A known manifest token must never permit Fusion share creation or
@@ -321,6 +417,7 @@ function apply(root) {
   }
   fs.writeFileSync(setupPath, setupBefore.replace(projectImportScript,
     '<script src="/setup-modules/portable-profile-normalizer.js"></script>\n' +
+    '<script src="/setup-modules/catalog-import-planner.js"></script>\n' +
     projectImportScript + '\n<script src="/setup-modules/manifest-link-import.js"></script>'), "utf8");
 
   let webFiles = 0;
@@ -417,6 +514,7 @@ function apply(root) {
   const handler = fs.readFileSync(seasonPaths[0], "utf8");
   if (!index.includes(PREFIX + "/setup.html") ||
       !setup.includes(PREFIX + "/setup-modules/manifest-link-import.js") ||
+      !setup.includes(PREFIX + "/setup-modules/catalog-import-planner.js") ||
       !setup.includes(PREFIX + "/setup-modules/portable-profile-normalizer.js") ||
       !handler.includes("season_number >= 0")) {
     throw new Error("Post-patch smoke assertions failed");
