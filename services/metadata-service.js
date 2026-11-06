@@ -6,7 +6,7 @@ const certCache = new Map();
 const CERT_TTL = 7 * 24 * 60 * 60 * 1000;
 const imdbTmdbCache = new Map();
 const FILTER_ENABLED = process.env.FILTER_MODE !== "off";
-const MDBLIST_KEYS = ( process.env.MDBLIST_KEYS || process.env.MDBLIST_KEY || "5woimia0xf19uqr4rd7wl1960" ).split(",").map(k => k.trim()).filter(Boolean);
+const MDBLIST_KEYS = ( process.env.MDBLIST_KEYS || process.env.MDBLIST_KEY || "" ).split(",").map(k => k.trim()).filter(Boolean);
 
 async function getImdbId(tmdbId, type) {
   const key = `${type}-${tmdbId}`;
