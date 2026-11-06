@@ -26,8 +26,8 @@ function setup() {
  const configs=Object.assign(Object.create(null),{[token]:{
   passwordHash:hashPassword("strong-password"),catalogs:["movie"]
  }});
- const app={post(path,fn){routes["POST "+path]=fn;},
-  get(path,fn){routes["GET "+path]=fn;}};
+ const app={post(path,...fns){routes["POST "+path]=fns.at(-1);},
+  get(path,...fns){routes["GET "+path]=fns.at(-1);}};
  registerConfigRoutes(app,{loadConfigs:()=>configs,saveConfigs:()=>{writes++;},
   hashPassword,verifyPassword,generateToken:()=>"0123456789ABCDEF0123456789ABCDEF",
   rateLimit:()=>false});

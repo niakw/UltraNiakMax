@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - package.json
+      - .github/workflows/refresh-lockfile.yml
 
 permissions:
   contents: write
@@ -24,18 +25,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Recreate lockfile from the audited direct dependency list
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Commit lockfile if changed
+      - name: Safely synchronize and regenerate lockfile from current main
         shell: bash
         run: |
           set -Eeuo pipefail
-          if git diff --quiet -- package-lock.json; then
-            echo "No lockfile change required"
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "build(security): prune unused vulnerable SDK dependency tree"
-          git push origin HEAD:main
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+            if git diff --quiet -- package-lock.json; then
+              echo "Lockfile already in sync with current main"
+              exit 0
+            fi
+            git add package-lock.json
+            git commit -m "build(security): refresh locked dependencies [skip ci]"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Concurrent main update; resynchronizing before retry"
+            sleep 1
+          done
+          echo "::error::Could not publish lockfile after 5 safe retries"
+          exit 1

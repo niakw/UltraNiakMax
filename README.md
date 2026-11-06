@@ -70,7 +70,7 @@ npm ci
 npm test
 ```
 
-The Node test suite covers Season 0/special episodes, episode ordering, IDs and partial TMDB failures. The `/health` endpoint checks that the server is reachable; actual Stremio/Nuvio playback and artwork behavior must still be validated on client devices.
+The Node test suite covers Season 0/special episodes, route security, SSRF rejection, password-gated configuration access, prototype-pollution protections, and partial TMDB failures. The `/health` endpoint checks that the server is reachable; actual Stremio/Nuvio playback and artwork behavior must still be validated on client devices.
 
 ## Search indexing and privacy
 
@@ -78,7 +78,7 @@ The legacy Node server sends `X-Robots-Tag: noindex, nofollow, noarchive, nosnip
 
 ## Security and compatibility notes
 
-- Treat each configuration URL/token as a **secret**: older configs may include provider API keys, and the configuration API currently returns saved settings to callers with that token. Prefer new tokens (16 random bytes), HTTPS and private sharing.
+- Treat each configuration URL/token as a **secret**: configured manifests may embed private provider and stream credentials. The public `GET /c/:token/config` now returns only non-secret settings; full saved configuration is available only after password verification through `POST /c/:token/config/auth`. Prefer new 128-bit tokens, HTTPS and private sharing.
 - Existing **8-character** tokens created before this fork remain usable but are weaker. Re-create those configurations if they were shared.
 - Use a trusted reverse proxy for TLS. Set `TRUST_PROXY_HOPS=1` only when there is exactly one proxy in front of Node; otherwise leave it at `0`.
 - TMDB is required; MDBList, Trakt and AI services are optional and require their own keys. No third-party keys are bundled.

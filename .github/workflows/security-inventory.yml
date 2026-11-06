@@ -8,11 +8,21 @@ on:
       - package.json
       - package-lock.json
       - .github/workflows/security-inventory.yml
+      - index.js
+      - configure.html
+      - services/**
+      - utils/**
+      - deployment/eitty/**
   pull_request:
     paths:
       - package.json
       - package-lock.json
       - .github/workflows/security-inventory.yml
+      - index.js
+      - configure.html
+      - services/**
+      - utils/**
+      - deployment/eitty/**
 
 permissions:
   contents: read
