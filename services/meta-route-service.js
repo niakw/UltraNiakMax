@@ -1,3 +1,4 @@
+const { getSeriesVideos } = require("./season-video-service");
 async function handleConfiguredMeta(req, res, deps) {
   const { token, type, id } = req.params;
   const { loadConfigs, fetchCached, TMDB_KEY } = deps;
@@ -13,16 +14,6 @@ async function handleConfiguredMeta(req, res, deps) {
     );
 
     const result = findRes[`${tmdbType}_results`]?.[0];
-
-    console.log(
-      "META DEBUG:",
-      tmdbType,
-      id,
-      "result:",
-      result?.id,
-      "lang:",
-      lang
-    );
 
     if (!result) {
       return res.json({ meta: { id, type } });
@@ -78,52 +69,9 @@ async function handleConfiguredMeta(req, res, deps) {
     };
 
     if (type === "series") {
-      const seasons = (d.seasons || [])
-        .filter(s => Number.isInteger(s?.season_number) && s.season_number >= 0);
-
-      const seasonData = await Promise.all(
-        seasons.map(async season => {
-          try {
-            return await fetchCached(
-              `https://api.themoviedb.org/3/tv/${tmdbId}/season/${season.season_number}?api_key=${TMDB_KEY}`
-            );
-          } catch {
-            return null;
-          }
-        })
-      );
-
-      const videos = [];
-
-      seasonData.forEach((sr, i) => {
-        if (!sr) return;
-
-        const season = seasons[i];
-
-        (sr.episodes || []).forEach(ep => {
-          videos.push({
-            id: `${id}:${season.season_number}:${ep.episode_number}`,
-            title: ep.name || `Episode ${ep.episode_number}`,
-            season: season.season_number,
-            episode: ep.episode_number,
-            overview: ep.overview || "",
-            thumbnail: ep.still_path
-              ? `https://image.tmdb.org/t/p/w300${ep.still_path}`
-              : null,
-            released: ep.air_date
-              ? new Date(ep.air_date).toISOString()
-              : null
-          });
-        });
+      meta.videos = await getSeriesVideos({
+        id, tmdbId, seasons: d.seasons, TMDB_KEY, fetchCached
       });
-
-      videos.sort((a, b) =>
-        a.season !== b.season
-          ? a.season - b.season
-          : a.episode - b.episode
-      );
-
-      meta.videos = videos;
     }
 
     return res.json({ meta });
